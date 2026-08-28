@@ -1,0 +1,49 @@
+language: en-US
+tone_instructions: Be concise and direct. Report only actionable, non-trivial findings.
+
+reviews:
+  profile: quiet
+  request_changes_workflow: true
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  collapse_walkthrough: true
+  changed_files_summary: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  related_issues: false
+  related_prs: false
+  poem: false
+  suggested_labels: true
+  auto_apply_labels: true
+  mutually_exclusive_groups:
+    risk:
+      - low-risk
+      - needs-human-review
+  labeling_instructions:
+    - label: needs-human-review
+      instructions: >-
+        Apply when requirements are ambiguous or the change affects authentication,
+        secrets, private data, agent tools or permissions, external writes,
+        idempotency, persistent state, schemas, migrations, Google Cloud
+        infrastructure, runtime dependencies, or hackathon demo claims.
+    - label: low-risk
+      instructions: >-
+        Apply only to narrowly scoped documentation, UI, test, or maintenance
+        changes that do not affect security, persistent state, infrastructure,
+        dependencies, agent permissions, external side effects, or demo claims.
+  path_instructions:
+    - path: "**/*"
+      instructions: >-
+        Apply AGENTS.md. Focus on correctness, security, scope drift, missing
+        validation, unsafe model-directed actions, idempotency, retry behavior,
+        state consistency, misleading documentation, and missing high-value tests.
+        Do not comment on subjective style, naming preferences, formatting, or
+        speculative improvements unless they materially affect correctness.
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
