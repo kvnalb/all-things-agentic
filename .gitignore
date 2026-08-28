@@ -5,3 +5,5 @@
 *.pem
 *.key
 *.p12
+__pycache__/
+*.py[cod]

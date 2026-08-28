@@ -1,0 +1,37 @@
+language: en-US
+tone_instructions: Be concise and direct. Report only actionable, non-trivial findings.
+
+reviews:
+  profile: quiet
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  collapse_walkthrough: true
+  changed_files_summary: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  related_issues: false
+  related_prs: false
+  poem: false
+  suggested_labels: false
+  auto_apply_labels: false
+  path_instructions:
+    - path: "**/*"
+      instructions: >-
+        Apply AGENTS.md. Compare the linked issue and acceptance criteria, the PR's
+        stated intent and behavior change, its Decisions and assumptions, the
+        actual diff, and the tests. Report intent drift, undisclosed material
+        decisions visible in the PR, correctness or security defects, weakened or
+        removed tests and CI, unsafe external actions, and claims unsupported by
+        evidence. Ignore subjective style, naming, formatting, and speculative
+        improvements. Review is advisory; do not classify merge eligibility.
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+    base_branches:
+      - ".*"
+
+knowledge_base:
+  code_guidelines:
+    enabled: true

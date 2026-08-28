@@ -9,25 +9,48 @@ Ship a reliable, judge-ready product quickly. Prefer the smallest clear change t
 - Never push directly to `main`.
 - Use a short-lived `feat/`, `fix/`, `docs/`, or `chore/` branch.
 - Create an issue for meaningful features, bugs, and infrastructure work. A PR is enough for trivial changes.
+- Treat the linked issue as the canonical, reviewable statement of intent. When chat materially changes the requested outcome, constraints, or acceptance criteria, update the issue before continuing.
+- Before editing, post a concise chat preflight using `Intent:`, `Plan:`, `Material decisions/assumptions:`, and `Will pause if:`. Continue without waiting when the intent is unambiguous.
 - Keep each PR focused on one outcome; do not mix features with unrelated refactors.
 - Before merging, run `make check`, review the diff, and document manual verification.
-- Agents may create issues, branches, commits, and PRs. They must not auto-merge.
+- Agents may create issues, branches, commits, PRs, and merge routine PRs after every merge gate below passes.
 
 ## Review policy
 
-CI and automated review are required on every PR. Human review is required when a change involves:
+CI is the only mandatory automated merge gate. CodeRabbit is an asynchronous advisory reviewer, not a required status or approval. Human involvement is required only for:
 
-- ambiguous requirements or drift from the PRD;
-- authentication, authorization, secrets, or private student data;
-- agent tools, permissions, prompts that control actions, or model-generated arguments;
-- external writes, deletion, retries, or idempotency;
-- persistent state, schemas, migrations, or workflow states;
-- Google Cloud IAM, deployment, networking, or production configuration;
-- new runtime dependencies or hosted services;
-- behavior or claims used in the hackathon demo;
-- a diff too broad to verify confidently.
+- ambiguous intent or implementation drift from the linked issue, PRD, acceptance criteria, or explicit user direction;
+- a material decision, assumption, or deviation implied by the diff but not disclosed in chat and the PR;
+- a destructive, costly, sensitive, or externally consequential action that lacks explicit authorization.
 
-Low-risk documentation, UI, test, and narrowly scoped code changes may be merged after CI and automated review pass. Humans always make the final merge decision.
+Do not require human review merely because an authorized and disclosed change touches infrastructure, security, persistence, dependencies, or external actions. Require focused tests and accurate disclosure.
+
+A PR is eligible for agent merge when `check` succeeds on the current head commit, the PR is not a draft, intent remains unambiguous, `needs-human-review` is absent, and any review conversations already opened are resolved. Do not wait for CodeRabbit solely to merge.
+
+## Decision reporting
+
+- Never make a silent material decision. A decision is material if it changes scope, behavior, architecture, dependencies, security, data handling, external side effects, deployment, or the demo story.
+- Report newly discovered material choices in chat immediately, prefixed with `Decision:`, `Assumption:`, or `Suggestion:`.
+- If intent is ambiguous or a choice would expand/change the requested outcome, pause for confirmation instead of choosing silently.
+- Record material decisions, deviations, and assumptions in the PR's `Decisions and assumptions` section.
+- Record decisions with lasting architectural or product impact in `docs/devlog.md`.
+- `None — implementation follows the issue exactly.` is valid only when the diff contains no material choice beyond the stated acceptance criteria.
+
+## CodeRabbit triage
+
+- If CodeRabbit responds before merge, inspect every substantive finding; never apply suggestions blindly.
+- Fix valid findings, add or update a focused test when appropriate, and rerun `make check`.
+- Reply to invalid findings with a concrete, verified rationale.
+- Resolve review conversations only after recording the fix or rationale.
+- Do not delay a merge because CodeRabbit is pending or unavailable. A valid finding received after merge becomes a focused follow-up issue or PR.
+- Before handoff or merge, summarize any review received, findings fixed, and findings rejected with rationale.
+
+## Merge procedure
+
+- Recheck the current head, `check` status, labels, draft state, and existing review conversations immediately before merging.
+- Never use administrator bypass or merge with a stale CI result.
+- Post a concise handoff containing `Delivered`, `Intent changes`, `Decisions`, `Verification`, `CodeRabbit`, `Watch-outs`, and `Try it`.
+- If every gate passes, squash-merge the PR and delete its branch.
 
 ## Engineering rules
 
@@ -39,6 +62,7 @@ Low-risk documentation, UI, test, and narrowly scoped code changes may be merged
 - Persist state before and after consequential actions.
 - Require approval for irreversible, destructive, costly, or sensitive actions.
 - Use structured logs with a stable `run_id`; never log secrets or private student data.
+- Zero product tests are permitted only before the application scaffold exists. The first non-trivial product code must add the first focused test.
 - Non-trivial behavior needs a focused test. Bug fixes need a regression test.
 - Never claim mocked or planned behavior is implemented or live.
 
@@ -68,4 +92,6 @@ Update `docs/demo-script.md` when a reliable demo scenario changes. Do not journ
 - The primary path and relevant failure path were verified.
 - No unrelated changes, secrets, or private data are present.
 - README/architecture, devlog, and demo script are updated when affected.
+- The PR discloses all material decisions, deviations, and assumptions.
+- CI passes on the current head; any review conversations received before merge were triaged and resolved.
 - The PR is small enough for another person or review agent to understand quickly.

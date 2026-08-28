@@ -10,6 +10,10 @@ assignees: ""
 
 <!-- What should be observably different for the user? -->
 
+## Constraints and non-goals
+
+<!-- What must remain true, and what is intentionally outside this change? -->
+
 ## Acceptance criteria
 
 - [ ]

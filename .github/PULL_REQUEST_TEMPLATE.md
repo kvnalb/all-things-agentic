@@ -1,8 +1,14 @@
-## What and why
+## Intent
 
-<!-- What changed, and what user or engineering problem does it solve? -->
+<!-- What outcome does the linked issue require? -->
 
 Closes #
+
+## Behavior change
+
+Before:
+
+After:
 
 ## Verification
 
@@ -15,12 +21,20 @@ Evidence:
 
 <!-- Tests, screenshots, or sanitized logs. -->
 
-## Risk
+## Decisions and assumptions
 
-- [ ] Low risk
-- [ ] Needs human review
+<!--
+List material decisions, assumptions, or deviations not dictated by the issue.
+If there were none, write: None — implementation follows the issue exactly.
+-->
 
-<!-- Call out auth, data, external writes, state, dependencies, infrastructure, or demo changes. -->
+## Advisory review
+
+- Status: Pending, not received, or reviewed
+- Valid findings fixed:
+- Findings rejected with rationale:
+
+<!-- CodeRabbit is advisory and does not need to complete before merge. -->
 
 ## Limitations
 
