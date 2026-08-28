@@ -22,26 +22,26 @@ reviews:
   labeling_instructions:
     - label: needs-human-review
       instructions: >-
-        Apply only when the implementation drifts from the linked issue, PRD,
-        acceptance criteria, or explicit intent; or when the diff implies a
-        material decision, deviation, assumption, or suggestion that is missing
-        from the PR's Decisions and deviations section. Do not apply solely
-        because a fully disclosed change touches security, data, infrastructure,
-        dependencies, external actions, or demo behavior.
+        Apply when intent is ambiguous; the implementation drifts from the linked
+        issue, PRD, acceptance criteria, or PR intent; the diff implies a material
+        decision, deviation, or assumption missing from Decisions and assumptions;
+        or a destructive, costly, sensitive, or externally consequential action
+        lacks explicit authorization. Do not apply solely because an authorized
+        and fully disclosed change touches a sensitive technical area.
     - label: low-risk
       instructions: >-
-        Apply when the implementation matches the stated intent and every
-        material decision, deviation, assumption, and suggestion is disclosed
-        in the PR, regardless of which technical area the change touches.
+        Apply when the implementation matches concrete stated intent, material
+        decisions and assumptions are disclosed, consequential actions are
+        authorized, and no human clarification is needed.
   path_instructions:
     - path: "**/*"
       instructions: >-
-        Apply AGENTS.md. Check the diff against the linked issue, PRD, acceptance
-        criteria, and the PR's Decisions and deviations section. Escalate to a
-        human only for intent drift or an undisclosed material decision. Continue
-        to report concrete correctness or security defects, but do not use them
-        alone to demand human review when intent and decisions are clear. Ignore
-        subjective style, naming, formatting, and speculative improvements.
+        Apply AGENTS.md. Compare the linked issue and acceptance criteria, the PR's
+        stated intent and behavior change, its Decisions and assumptions, the
+        actual diff, and the tests. Request changes for intent drift, undisclosed
+        material decisions, correctness or security defects, weakened or removed
+        tests and CI, unsafe external actions, or claims unsupported by evidence.
+        Ignore subjective style, naming, formatting, and speculative improvements.
   auto_review:
     enabled: true
     drafts: false

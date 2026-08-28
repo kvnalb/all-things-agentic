@@ -10,7 +10,7 @@ for required_file in AGENTS.md docs/devlog.md docs/demo-script.md; do
   fi
 done
 
-if [ -d tests ]; then
+if [ -d tests ] && find tests -type f -name 'test_*.py' -print -quit | grep -q .; then
   python3 -m unittest discover -s tests -p 'test_*.py'
 fi
 

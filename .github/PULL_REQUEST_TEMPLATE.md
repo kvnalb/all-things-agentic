@@ -1,8 +1,14 @@
-## What and why
+## Intent
 
-<!-- What changed, and what user or engineering problem does it solve? -->
+<!-- What outcome does the linked issue require? -->
 
 Closes #
+
+## Behavior change
+
+Before:
+
+After:
 
 ## Verification
 
@@ -15,21 +21,20 @@ Evidence:
 
 <!-- Tests, screenshots, or sanitized logs. -->
 
-## Decisions and deviations
+## Decisions and assumptions
 
 <!--
-List every material decision, assumption, deviation, and suggestion not dictated
-by the issue. Include suggestions that were not implemented. If there were none,
-write: None — implementation follows the issue exactly.
+List material decisions, assumptions, or deviations not dictated by the issue.
+If there were none, write: None — implementation follows the issue exactly.
 -->
 
-## Automated review escalation
+## CodeRabbit
 
-- [ ] Intent drift detected
-- [ ] Undisclosed material decision detected
-- [ ] No human review required
+- Findings fixed:
+- Findings rejected with rationale:
+- Unresolved:
 
-<!-- CodeRabbit owns this classification. -->
+<!-- Complete this after automated review. -->
 
 ## Limitations
 

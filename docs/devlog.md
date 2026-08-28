@@ -2,15 +2,15 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
-## 2026-08-28 — Use conditional human review and decision disclosure
+## 2026-08-28 — Use a lightweight agent-merge workflow
 
 Issue: `#3`
 
-- **Before:** Every PR needed one approval, even when CI and automated review found no intent drift.
-- **Decision:** Require human review only for intent drift or material decisions missing from chat and the PR; enforce decision disclosure with a lightweight PR gate.
-- **After:** Routine PRs can merge after CI and CodeRabbit, while `needs-human-review` conditionally requires a current human approval.
-- **Evidence:** Unit tests for disclosure parsing and approval matching, plus the `risk-gate` GitHub check.
-- **Limitation:** Automated review infers drift from written intent, so issues and PR descriptions must remain concrete.
+- **Before:** Every PR needed one approval, and the first conditional-review design added custom process code before product code.
+- **Decision:** Let agents merge unambiguous PRs after current-head CI and CodeRabbit success, while issues preserve intent and humans handle ambiguity, unauthorized consequential actions, and review outages.
+- **After:** Preflight chat, focused PR evidence, CodeRabbit triage, and protected-branch checks provide complementary safeguards without blanket peer approval or a custom risk gate.
+- **Evidence:** `docs/workflow.md`, repository templates, CodeRabbit policy, `make check`, and protected-branch settings.
+- **Limitation:** Conditional human escalation is policy-driven; clear issues and honest decision disclosure remain essential.
 
 ## 2026-08-27 — Standardize on CodeRabbit review automation
 
