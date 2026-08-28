@@ -15,12 +15,21 @@ Evidence:
 
 <!-- Tests, screenshots, or sanitized logs. -->
 
-## Risk
+## Decisions and deviations
 
-- [ ] Low risk
-- [ ] Needs human review
+<!--
+List every material decision, assumption, deviation, and suggestion not dictated
+by the issue. Include suggestions that were not implemented. If there were none,
+write: None — implementation follows the issue exactly.
+-->
 
-<!-- Call out auth, data, external writes, state, dependencies, infrastructure, or demo changes. -->
+## Automated review escalation
+
+- [ ] Intent drift detected
+- [ ] Undisclosed material decision detected
+- [ ] No human review required
+
+<!-- CodeRabbit owns this classification. -->
 
 ## Limitations
 

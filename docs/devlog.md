@@ -2,7 +2,17 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
-### 2026-08-27 — Standardize on CodeRabbit review automation
+## 2026-08-28 — Use conditional human review and decision disclosure
+
+Issue: `#3`
+
+- **Before:** Every PR needed one approval, even when CI and automated review found no intent drift.
+- **Decision:** Require human review only for intent drift or material decisions missing from chat and the PR; enforce decision disclosure with a lightweight PR gate.
+- **After:** Routine PRs can merge after CI and CodeRabbit, while `needs-human-review` conditionally requires a current human approval.
+- **Evidence:** Unit tests for disclosure parsing and approval matching, plus the `risk-gate` GitHub check.
+- **Limitation:** Automated review infers drift from written intent, so issues and PR descriptions must remain concrete.
+
+## 2026-08-27 — Standardize on CodeRabbit review automation
 
 Issue: `#3`
 

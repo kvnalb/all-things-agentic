@@ -22,27 +22,32 @@ reviews:
   labeling_instructions:
     - label: needs-human-review
       instructions: >-
-        Apply when requirements are ambiguous or the change affects authentication,
-        secrets, private data, agent tools or permissions, external writes,
-        idempotency, persistent state, schemas, migrations, Google Cloud
-        infrastructure, runtime dependencies, or hackathon demo claims.
+        Apply only when the implementation drifts from the linked issue, PRD,
+        acceptance criteria, or explicit intent; or when the diff implies a
+        material decision, deviation, assumption, or suggestion that is missing
+        from the PR's Decisions and deviations section. Do not apply solely
+        because a fully disclosed change touches security, data, infrastructure,
+        dependencies, external actions, or demo behavior.
     - label: low-risk
       instructions: >-
-        Apply only to narrowly scoped documentation, UI, test, or maintenance
-        changes that do not affect security, persistent state, infrastructure,
-        dependencies, agent permissions, external side effects, or demo claims.
+        Apply when the implementation matches the stated intent and every
+        material decision, deviation, assumption, and suggestion is disclosed
+        in the PR, regardless of which technical area the change touches.
   path_instructions:
     - path: "**/*"
       instructions: >-
-        Apply AGENTS.md. Focus on correctness, security, scope drift, missing
-        validation, unsafe model-directed actions, idempotency, retry behavior,
-        state consistency, misleading documentation, and missing high-value tests.
-        Do not comment on subjective style, naming preferences, formatting, or
-        speculative improvements unless they materially affect correctness.
+        Apply AGENTS.md. Check the diff against the linked issue, PRD, acceptance
+        criteria, and the PR's Decisions and deviations section. Escalate to a
+        human only for intent drift or an undisclosed material decision. Continue
+        to report concrete correctness or security defects, but do not use them
+        alone to demand human review when intent and decisions are clear. Ignore
+        subjective style, naming, formatting, and speculative improvements.
   auto_review:
     enabled: true
     drafts: false
     auto_incremental_review: true
+    base_branches:
+      - ".*"
 
 knowledge_base:
   code_guidelines:

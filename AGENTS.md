@@ -15,19 +15,23 @@ Ship a reliable, judge-ready product quickly. Prefer the smallest clear change t
 
 ## Review policy
 
-CI and automated review are required on every PR. Human review is required when a change involves:
+CI and automated review are required on every PR. Human review is required only when automated review finds either:
 
-- ambiguous requirements or drift from the PRD;
-- authentication, authorization, secrets, or private student data;
-- agent tools, permissions, prompts that control actions, or model-generated arguments;
-- external writes, deletion, retries, or idempotency;
-- persistent state, schemas, migrations, or workflow states;
-- Google Cloud IAM, deployment, networking, or production configuration;
-- new runtime dependencies or hosted services;
-- behavior or claims used in the hackathon demo;
-- a diff too broad to verify confidently.
+- implementation drift from the linked issue, PRD, acceptance criteria, or explicit user intent; or
+- a material decision, assumption, deviation, or suggestion implied by the diff that was not disclosed in chat and in the PR's `Decisions and deviations` section.
 
-Low-risk documentation, UI, test, and narrowly scoped code changes may be merged after CI and automated review pass. Humans always make the final merge decision.
+Do not require human review merely because a disclosed change touches infrastructure, security, persistence, dependencies, or external actions. Those changes still require explicit authorization, focused tests, and accurate disclosure.
+
+PRs without `needs-human-review` may merge after CI and automated review pass. A PR with that label needs approval from a human other than its author on the current head commit.
+
+## Decision reporting
+
+- Never make a silent material decision. A decision is material if it changes scope, behavior, architecture, dependencies, security, data handling, external side effects, deployment, or the demo story.
+- Report material choices in chat before implementing them, prefixed with `Decision:`, `Assumption:`, or `Suggestion:`.
+- If intent is ambiguous or a choice would expand/change the requested outcome, pause for confirmation instead of choosing silently.
+- Record every material decision, deviation, assumption, and unimplemented suggestion in the PR's `Decisions and deviations` section.
+- Record decisions with lasting architectural or product impact in `docs/devlog.md`.
+- `None — implementation follows the issue exactly.` is valid only when the diff contains no material choice beyond the stated acceptance criteria.
 
 ## Engineering rules
 
@@ -68,4 +72,5 @@ Update `docs/demo-script.md` when a reliable demo scenario changes. Do not journ
 - The primary path and relevant failure path were verified.
 - No unrelated changes, secrets, or private data are present.
 - README/architecture, devlog, and demo script are updated when affected.
+- The PR discloses all material decisions, deviations, assumptions, and suggestions.
 - The PR is small enough for another person or review agent to understand quickly.
