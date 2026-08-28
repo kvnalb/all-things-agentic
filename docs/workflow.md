@@ -31,7 +31,7 @@ flowchart TD
     REPLY --> CI
     ARR -->|No, after merge| FOLLOW[Valid finding becomes<br/>a focused follow-up]
 
-    CIP -->|Yes| G{Intent clear, PR ready, and<br/>no needs-human-review label?}
+    CIP -->|Yes| G{Intent clear, PR ready,<br/>no escalation label, and<br/>existing threads resolved?}
     G -->|No| ESC[Pause for human clarification<br/>or authorization]
     ESC --> U
     G -->|Yes| D[Agent posts concise handoff digest]
@@ -54,6 +54,6 @@ An agent may squash-merge and delete the branch only when:
 2. No unresolved assumption changes scope or user-visible behavior.
 3. Material decisions are disclosed and consequential actions are authorized.
 4. `check` succeeds on the current head commit.
-5. The PR is not a draft and `needs-human-review` is absent.
+5. The PR is not a draft, `needs-human-review` is absent, and review conversations already opened are resolved.
 
 CodeRabbit does not control merge eligibility. Findings received before merge are triaged; valid findings received after merge become focused follow-up work.

@@ -25,7 +25,7 @@ CI is the only mandatory automated merge gate. CodeRabbit is an asynchronous adv
 
 Do not require human review merely because an authorized and disclosed change touches infrastructure, security, persistence, dependencies, or external actions. Require focused tests and accurate disclosure.
 
-A PR is eligible for agent merge when `check` succeeds on the current head commit, the PR is not a draft, intent remains unambiguous, and `needs-human-review` is absent. Do not wait for CodeRabbit solely to merge.
+A PR is eligible for agent merge when `check` succeeds on the current head commit, the PR is not a draft, intent remains unambiguous, `needs-human-review` is absent, and any review conversations already opened are resolved. Do not wait for CodeRabbit solely to merge.
 
 ## Decision reporting
 
@@ -41,12 +41,13 @@ A PR is eligible for agent merge when `check` succeeds on the current head commi
 - If CodeRabbit responds before merge, inspect every substantive finding; never apply suggestions blindly.
 - Fix valid findings, add or update a focused test when appropriate, and rerun `make check`.
 - Reply to invalid findings with a concrete, verified rationale.
+- Resolve review conversations only after recording the fix or rationale.
 - Do not delay a merge because CodeRabbit is pending or unavailable. A valid finding received after merge becomes a focused follow-up issue or PR.
 - Before handoff or merge, summarize any review received, findings fixed, and findings rejected with rationale.
 
 ## Merge procedure
 
-- Recheck the current head, `check` status, labels, and draft state immediately before merging.
+- Recheck the current head, `check` status, labels, draft state, and existing review conversations immediately before merging.
 - Never use administrator bypass or merge with a stale CI result.
 - Post a concise handoff containing `Delivered`, `Intent changes`, `Decisions`, `Verification`, `CodeRabbit`, `Watch-outs`, and `Try it`.
 - If every gate passes, squash-merge the PR and delete its branch.
@@ -92,5 +93,5 @@ Update `docs/demo-script.md` when a reliable demo scenario changes. Do not journ
 - No unrelated changes, secrets, or private data are present.
 - README/architecture, devlog, and demo script are updated when affected.
 - The PR discloses all material decisions, deviations, and assumptions.
-- CI passes on the current head; any CodeRabbit review received before merge was triaged.
+- CI passes on the current head; any review conversations received before merge were triaged and resolved.
 - The PR is small enough for another person or review agent to understand quickly.
