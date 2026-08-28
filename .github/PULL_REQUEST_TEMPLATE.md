@@ -28,13 +28,13 @@ List material decisions, assumptions, or deviations not dictated by the issue.
 If there were none, write: None — implementation follows the issue exactly.
 -->
 
-## CodeRabbit
+## Advisory review
 
-- Findings fixed:
+- Status: Pending, not received, or reviewed
+- Valid findings fixed:
 - Findings rejected with rationale:
-- Unresolved:
 
-<!-- Complete this after automated review. -->
+<!-- CodeRabbit is advisory and does not need to complete before merge. -->
 
 ## Limitations
 

@@ -17,16 +17,15 @@ Ship a reliable, judge-ready product quickly. Prefer the smallest clear change t
 
 ## Review policy
 
-CI and CodeRabbit review are required on every PR. Human involvement is required only for:
+CI is the only mandatory automated merge gate. CodeRabbit is an asynchronous advisory reviewer, not a required status or approval. Human involvement is required only for:
 
 - ambiguous intent or implementation drift from the linked issue, PRD, acceptance criteria, or explicit user direction;
 - a material decision, assumption, or deviation implied by the diff but not disclosed in chat and the PR;
-- a destructive, costly, sensitive, or externally consequential action that lacks explicit authorization; or
-- a CodeRabbit outage or pending review lasting more than ten minutes.
+- a destructive, costly, sensitive, or externally consequential action that lacks explicit authorization.
 
 Do not require human review merely because an authorized and disclosed change touches infrastructure, security, persistence, dependencies, or external actions. Require focused tests and accurate disclosure.
 
-A PR is eligible for agent merge only when `check` and `CodeRabbit` succeed on the current head commit, the PR is not a draft, all review conversations are resolved, and `needs-human-review` is absent. If CodeRabbit remains pending for ten minutes, the agent must report the outage and stop; only a human may explicitly override it.
+A PR is eligible for agent merge when `check` succeeds on the current head commit, the PR is not a draft, intent remains unambiguous, and `needs-human-review` is absent. Do not wait for CodeRabbit solely to merge.
 
 ## Decision reporting
 
@@ -39,16 +38,16 @@ A PR is eligible for agent merge only when `check` and `CodeRabbit` succeed on t
 
 ## CodeRabbit triage
 
-- Inspect every substantive CodeRabbit finding; never apply suggestions blindly.
+- If CodeRabbit responds before merge, inspect every substantive finding; never apply suggestions blindly.
 - Fix valid findings, add or update a focused test when appropriate, and rerun `make check`.
 - Reply to invalid findings with a concrete, verified rationale.
-- After any new commit, wait for CI and CodeRabbit to evaluate the new head. Stale results never authorize a merge.
-- Before handoff or merge, summarize findings fixed, rejected with rationale, and unresolved.
+- Do not delay a merge because CodeRabbit is pending or unavailable. A valid finding received after merge becomes a focused follow-up issue or PR.
+- Before handoff or merge, summarize any review received, findings fixed, and findings rejected with rationale.
 
 ## Merge procedure
 
-- Recheck the current head, required statuses, labels, draft state, and unresolved conversations immediately before merging.
-- Never use administrator bypass. A bypass is reserved for an explicit human decision during a CodeRabbit outage.
+- Recheck the current head, `check` status, labels, and draft state immediately before merging.
+- Never use administrator bypass or merge with a stale CI result.
 - Post a concise handoff containing `Delivered`, `Intent changes`, `Decisions`, `Verification`, `CodeRabbit`, `Watch-outs`, and `Try it`.
 - If every gate passes, squash-merge the PR and delete its branch.
 
@@ -62,6 +61,7 @@ A PR is eligible for agent merge only when `check` and `CodeRabbit` succeed on t
 - Persist state before and after consequential actions.
 - Require approval for irreversible, destructive, costly, or sensitive actions.
 - Use structured logs with a stable `run_id`; never log secrets or private student data.
+- Zero product tests are permitted only before the application scaffold exists. The first non-trivial product code must add the first focused test.
 - Non-trivial behavior needs a focused test. Bug fixes need a regression test.
 - Never claim mocked or planned behavior is implemented or live.
 
@@ -92,5 +92,5 @@ Update `docs/demo-script.md` when a reliable demo scenario changes. Do not journ
 - No unrelated changes, secrets, or private data are present.
 - README/architecture, devlog, and demo script are updated when affected.
 - The PR discloses all material decisions, deviations, and assumptions.
-- CI and CodeRabbit pass on the current head, and review conversations are resolved.
+- CI passes on the current head; any CodeRabbit review received before merge was triaged.
 - The PR is small enough for another person or review agent to understand quickly.

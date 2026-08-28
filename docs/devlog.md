@@ -7,10 +7,10 @@ Keep entries short and limited to meaningful or demo-worthy decisions.
 Issue: `#3`
 
 - **Before:** Every PR needed one approval, and the first conditional-review design added custom process code before product code.
-- **Decision:** Let agents merge unambiguous PRs after current-head CI and CodeRabbit success, while issues preserve intent and humans handle ambiguity, unauthorized consequential actions, and review outages.
-- **After:** Preflight chat, focused PR evidence, CodeRabbit triage, and protected-branch checks provide complementary safeguards without blanket peer approval or a custom risk gate.
+- **Decision:** Let agents merge unambiguous PRs after current-head CI success; keep CodeRabbit asynchronous and advisory while issues preserve intent and humans handle ambiguity or unauthorized consequential actions.
+- **After:** Preflight chat, focused PR evidence, deterministic CI, and optional CodeRabbit findings provide safeguards without blanket peer approval, a custom risk gate, or review-service latency.
 - **Evidence:** `docs/workflow.md`, repository templates, CodeRabbit policy, `make check`, and protected-branch settings.
-- **Limitation:** Conditional human escalation is policy-driven; clear issues and honest decision disclosure remain essential.
+- **Limitation:** Advisory findings can arrive after merge; valid late findings require a focused follow-up.
 
 ## 2026-08-27 — Standardize on CodeRabbit review automation
 

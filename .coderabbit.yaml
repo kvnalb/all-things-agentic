@@ -3,7 +3,7 @@ tone_instructions: Be concise and direct. Report only actionable, non-trivial fi
 
 reviews:
   profile: quiet
-  request_changes_workflow: true
+  request_changes_workflow: false
   high_level_summary: true
   high_level_summary_in_walkthrough: true
   collapse_walkthrough: true
@@ -13,35 +13,18 @@ reviews:
   related_issues: false
   related_prs: false
   poem: false
-  suggested_labels: true
-  auto_apply_labels: true
-  mutually_exclusive_groups:
-    risk:
-      - low-risk
-      - needs-human-review
-  labeling_instructions:
-    - label: needs-human-review
-      instructions: >-
-        Apply when intent is ambiguous; the implementation drifts from the linked
-        issue, PRD, acceptance criteria, or PR intent; the diff implies a material
-        decision, deviation, or assumption missing from Decisions and assumptions;
-        or a destructive, costly, sensitive, or externally consequential action
-        lacks explicit authorization. Do not apply solely because an authorized
-        and fully disclosed change touches a sensitive technical area.
-    - label: low-risk
-      instructions: >-
-        Apply when the implementation matches concrete stated intent, material
-        decisions and assumptions are disclosed, consequential actions are
-        authorized, and no human clarification is needed.
+  suggested_labels: false
+  auto_apply_labels: false
   path_instructions:
     - path: "**/*"
       instructions: >-
         Apply AGENTS.md. Compare the linked issue and acceptance criteria, the PR's
         stated intent and behavior change, its Decisions and assumptions, the
-        actual diff, and the tests. Request changes for intent drift, undisclosed
-        material decisions, correctness or security defects, weakened or removed
-        tests and CI, unsafe external actions, or claims unsupported by evidence.
-        Ignore subjective style, naming, formatting, and speculative improvements.
+        actual diff, and the tests. Report intent drift, undisclosed material
+        decisions visible in the PR, correctness or security defects, weakened or
+        removed tests and CI, unsafe external actions, and claims unsupported by
+        evidence. Ignore subjective style, naming, formatting, and speculative
+        improvements. Review is advisory; do not classify merge eligibility.
   auto_review:
     enabled: true
     drafts: false
