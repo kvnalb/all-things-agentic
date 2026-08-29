@@ -84,9 +84,6 @@ class FakeGoogleApi(GoogleApiGateway):
         self.calendar_id = "calendar-created"
         return self.calendar_id
 
-    def send_test_email(self, secret_ref: str, *, recipient: str) -> None:
-        self.sent_to.append(recipient)
-
     def assert_calendar_identity(self, summary: str, marker: str) -> None:
         if summary != STUDY_CALENDAR_NAME or marker != STUDY_CALENDAR_MARKER:
             raise AssertionError("unexpected calendar identity")
@@ -110,6 +107,7 @@ class GoogleConnectorTest(unittest.TestCase):
             api=self.google,
             states=InMemoryOAuthStateStore(),
             redirect_uri="https://studyagent.test/api/auth/google/callback",
+            allowed_email="student@example.com",
         )
         app = FastAPI()
         app.include_router(create_google_router(self.connector))
@@ -192,6 +190,7 @@ class GoogleConnectorTest(unittest.TestCase):
             api=self.google,
             states=states,
             redirect_uri="https://studyagent.test/api/auth/google/callback",
+            allowed_email="student@example.com",
         )
         app = FastAPI()
         app.include_router(create_google_router(connector))
@@ -247,18 +246,8 @@ class GoogleConnectorTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertNotIn("sensitive detail", response.text)
 
-    def test_test_email_requires_connection_and_targets_authenticated_user(self) -> None:
-        disconnected = self.client.post("/api/connectors/google/test-email")
-        self.assertEqual(disconnected.status_code, 400)
-
-        state = self.begin()
-        self.client.get(
-            "/api/auth/google/callback", params={"code": "valid-code", "state": state}
-        )
-        response = self.client.post("/api/connectors/google/test-email")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.google.sent_to, ["student@example.com"])
+    def test_test_email_route_is_absent(self) -> None:
+        self.assertEqual(self.client.post("/api/connectors/google/test-email").status_code, 404)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,6 @@ gcloud services enable \
   storage.googleapis.com \
   secretmanager.googleapis.com \
   calendar-json.googleapis.com \
-  gmail.googleapis.com
 gcloud iam service-accounts create studyagent-runtime \
   --display-name="StudyAgent Cloud Run runtime"
 ```
@@ -41,7 +40,7 @@ In Google Auth Platform in the Cloud console:
    - `email`
    - `profile`
    - `https://www.googleapis.com/auth/calendar.app.created`
-   - `https://www.googleapis.com/auth/gmail.send`
+   - `https://www.googleapis.com/auth/calendar.readonly` (marker recovery)
 4. Create a **Web application** OAuth client.
 5. Add the deployed callback exactly as an authorized redirect URI:
    `https://CLOUD_RUN_HOST/api/auth/google/callback`.
@@ -50,7 +49,7 @@ The authorization adapter must pass `access_type=offline`,
 `include_granted_scopes=true`, and `prompt=consent`. The connector rejects a
 callback that lacks a refresh token or any required scope.
 
-Testing-mode warning: for an External app requesting Calendar/Gmail access,
+Testing-mode warning: for an External app requesting Calendar access,
 Google currently expires refresh tokens after seven days. That is acceptable for
 the hackathon. A durable student deployment must move the app to production and
 complete the applicable brand/data-access verification; it must also handle
@@ -58,9 +57,8 @@ revocation and refresh failure by asking the user to reconnect.
 
 ## 3. Store credentials with least privilege
 
-Create two secrets:
+Create the token secret:
 
-- `google-oauth-client`: OAuth client ID and client secret.
 - `google-oauth-token`: versions written by the callback; each value contains
   the refresh token and current token metadata.
 
@@ -97,14 +95,12 @@ Verify using the setup wizard:
    Calendar with `America/Los_Angeles` as its timezone.
 3. Reconnect and confirm the stored Calendar ID is recovered rather than a
    second calendar being created.
-4. Click the explicit test-email action and confirm the message arrives at the
-   authenticated address.
-5. Inspect API responses, Cloud Run logs, Firestore, and screenshots to confirm
+4. Inspect API responses, Cloud Run logs, Firestore, and screenshots to confirm
    no OAuth token or client secret appears.
 
-Calendar recovery deliberately uses the persisted calendar ID. The narrow
-`calendar.app.created` scope can create and access app-created calendars, but it
-cannot list the user's entire calendar list to search by name.
+Calendar recovery first uses the persisted calendar ID. `calendar.readonly` is
+needed only for marker discovery when a process dies between Calendar creation
+and persistence. No Gmail scope or test-email endpoint is used.
 
 ## Primary references
 
@@ -113,6 +109,5 @@ cannot list the user's entire calendar list to search by name.
 - [Calendar `calendars.insert`](https://developers.google.com/workspace/calendar/api/v3/reference/calendars/insert)
 - [Calendar `calendars.get`](https://developers.google.com/workspace/calendar/api/v3/reference/calendars/get)
 - [Calendar `calendarList.list` scopes](https://developers.google.com/workspace/calendar/api/v3/reference/calendarList/list)
-- [Gmail API scopes](https://developers.google.com/workspace/gmail/api/auth/scopes)
 - [Cloud Run secret configuration](https://cloud.google.com/run/docs/configuring/services/secrets)
 - [Secret Manager access control](https://cloud.google.com/secret-manager/docs/access-control)
