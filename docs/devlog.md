@@ -2,6 +2,16 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-28 — Keep Ed optional and staff-only
+
+Issue: `#11`
+
+- **Before:** StudyAgent had no Ed connection path, so course announcements and staff logistics could not contribute source evidence.
+- **Decision:** Use a small read-only adapter with conservative course matching, explicit manual overrides, bounded pagination/retries, and a fail-closed staff/public thread filter.
+- **After:** A token can validate through `/api/user`, active courses can be mapped to Canvas courses, and only public staff announcements plus pinned/recent staff threads are returned; Ed errors remain connector-local.
+- **Evidence:** Sanitized fixtures and focused tests cover active-course discovery, overrides, content filtering, token-safe errors, and successful orchestration.
+- **Limitation:** Ed's API is undocumented/beta; the adapter intentionally accepts only the tested user/course/thread response shapes and remains optional.
+
 ## 2026-08-28 — Establish one deployable application boundary
 
 Issue: `#6`

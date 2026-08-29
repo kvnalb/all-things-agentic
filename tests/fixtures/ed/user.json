@@ -1,0 +1,26 @@
+{
+  "user": {
+    "id": 42,
+    "name": "Sample Student",
+    "courses": [
+      {
+        "id": 501,
+        "code": "CS 189",
+        "name": "Introduction to Machine Learning",
+        "status": "active"
+      },
+      {
+        "id": 502,
+        "code": "DATA C100",
+        "name": "Principles and Techniques of Data Science",
+        "is_active": true
+      },
+      {
+        "id": 499,
+        "code": "CS 61A",
+        "name": "Structure and Interpretation of Computer Programs",
+        "status": "archived"
+      }
+    ]
+  }
+}

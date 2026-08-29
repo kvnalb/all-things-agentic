@@ -1,0 +1,70 @@
+{
+  "threads": [
+    {
+      "id": 1001,
+      "title": "Midterm room assignments",
+      "content": "The midterm room list is now available. Check your assigned room.",
+      "type": "announcement",
+      "is_private": false,
+      "is_pinned": false,
+      "created_at": "2026-08-25T17:00:00Z",
+      "updated_at": "2026-08-25T17:00:00Z",
+      "user": {"id": 1, "role": "instructor"}
+    },
+    {
+      "id": 1002,
+      "title": "Pinned homework policy",
+      "content": "Homework is due at 11:59 PM Pacific unless the assignment says otherwise.",
+      "type": "post",
+      "is_private": false,
+      "is_pinned": true,
+      "created_at": "2026-06-01T17:00:00Z",
+      "updated_at": "2026-06-01T17:00:00Z",
+      "user": {"id": 2, "role": "staff"}
+    },
+    {
+      "id": 1003,
+      "title": "Recent section logistics",
+      "content": "Friday section meets in the temporary room listed here.",
+      "type": "post",
+      "is_private": false,
+      "is_pinned": false,
+      "created_at": "2026-08-20T17:00:00Z",
+      "updated_at": "2026-08-21T17:00:00Z",
+      "user": {"id": 3, "is_staff": true}
+    },
+    {
+      "id": 1004,
+      "title": "Private accommodation",
+      "content": "Synthetic private content that must never be returned.",
+      "type": "post",
+      "is_private": true,
+      "is_pinned": true,
+      "created_at": "2026-08-23T17:00:00Z",
+      "updated_at": "2026-08-23T17:00:00Z",
+      "user": {"id": 4, "role": "instructor"}
+    },
+    {
+      "id": 1005,
+      "title": "Student question",
+      "content": "Synthetic student content that must never be returned.",
+      "type": "question",
+      "is_private": false,
+      "is_pinned": true,
+      "created_at": "2026-08-24T17:00:00Z",
+      "updated_at": "2026-08-24T17:00:00Z",
+      "user": {"id": 5, "role": "student"}
+    },
+    {
+      "id": 1006,
+      "title": "Old unpinned staff note",
+      "content": "Old content outside the bounded recent window.",
+      "type": "post",
+      "is_private": false,
+      "is_pinned": false,
+      "created_at": "2026-05-01T17:00:00Z",
+      "updated_at": "2026-05-01T17:00:00Z",
+      "user": {"id": 6, "role": "tutor"}
+    }
+  ]
+}
