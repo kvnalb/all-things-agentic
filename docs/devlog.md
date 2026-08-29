@@ -2,6 +2,16 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-28 — Bound source ingestion and model extraction
+
+Issue: `#9`
+
+- **Before:** Course pages and syllabus files had no safe ingestion path or constrained bridge into Gemini.
+- **Decision:** Reject redirects and non-public network destinations, snapshot supported content privately with deterministic IDs, and give a tool-free ADK extractor one schema-constrained Gemini 3.5 Flash call.
+- **After:** Public URLs and PDF/HTML/Markdown/text uploads are size-bounded, normalized, privately persisted, and convertible into source-linked event candidates that fail closed on invalid output.
+- **Evidence:** Focused SSRF, content-type, size, idempotency, API, and extraction tests included in `make check`.
+- **Limitation:** DNS is validated before connection but not pinned through TLS; production multi-user egress should enforce destination IP policy at connect time.
+
 ## 2026-08-28 — Establish one deployable application boundary
 
 Issue: `#6`
