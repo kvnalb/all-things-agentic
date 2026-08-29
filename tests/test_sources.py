@@ -265,6 +265,14 @@ class EventExtractorTest(unittest.IsolatedAsyncioTestCase):
                 normalized_text="Midterm Sep 24 at 6pm",
             )
 
+    async def test_hallucinated_evidence_fails_closed(self) -> None:
+        output = """{"events":[{"kind":"exam","title":"Midterm","all_day_date":"2026-09-24","evidence":"Midterm is September 24","confidence":0.95}]}"""
+        with self.assertRaises(ExtractionError):
+            await EventExtractor(FakeModel(output)).extract(
+                source=self.source(),
+                normalized_text="Midterm date will be announced later.",
+            )
+
     async def test_oversized_model_input_is_not_sent(self) -> None:
         model = FakeModel('{"events":[]}')
         with self.assertRaises(ExtractionError):

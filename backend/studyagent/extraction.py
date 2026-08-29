@@ -163,6 +163,8 @@ class EventExtractor:
 
         candidates: list[AcademicEventCandidate] = []
         for index, draft in enumerate(batch.events):
+            if draft.evidence not in normalized_text:
+                raise ExtractionError("event evidence was not found in the source")
             digest = hashlib.sha256(
                 f"{source.id}:{index}:{draft.model_dump_json()}".encode()
             ).hexdigest()[:24]
