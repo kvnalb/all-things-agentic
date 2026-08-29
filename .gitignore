@@ -7,3 +7,9 @@
 *.p12
 __pycache__/
 *.py[cod]
+.venv/
+.pytest_cache/
+.pnpm-store/
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
