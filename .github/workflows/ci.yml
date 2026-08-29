@@ -22,6 +22,7 @@ jobs:
           node-version: "22"
       - run: pip install uv
       - run: corepack enable
+      - run: corepack install --global pnpm@11.18.0
       - run: uv sync --frozen
       - run: pnpm --dir frontend install --frozen-lockfile
       - run: make check
