@@ -14,7 +14,7 @@ from studyagent.connectors.sources import (
     SourceIngestionError,
     SourceIngestionService,
 )
-from studyagent.models import Source
+from studyagent.models import IngestedSource
 
 
 router = APIRouter(prefix="/api/sources", tags=["sources"])
@@ -40,8 +40,10 @@ def get_source_service() -> SourceIngestionService:
 SourceService = Annotated[SourceIngestionService, Depends(get_source_service)]
 
 
-@router.post("/url", response_model=Source, status_code=status.HTTP_201_CREATED)
-async def add_url(request: UrlSourceRequest, service: SourceService) -> Source:
+@router.post("/url", response_model=IngestedSource, status_code=status.HTTP_201_CREATED)
+async def add_url(
+    request: UrlSourceRequest, service: SourceService
+) -> IngestedSource:
     try:
         return await service.add_url(
             course_id=request.course_id,
@@ -51,19 +53,21 @@ async def add_url(request: UrlSourceRequest, service: SourceService) -> Source:
     except OversizedSourceError as exc:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(exc)
-        )
+        ) from exc
     except SourceIngestionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        )
+        ) from exc
 
 
-@router.post("/upload", response_model=Source, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/upload", response_model=IngestedSource, status_code=status.HTTP_201_CREATED
+)
 async def add_upload(
     service: SourceService,
     course_id: Annotated[str, Form(min_length=1, max_length=200)],
     file: Annotated[UploadFile, File()],
-) -> Source:
+) -> IngestedSource:
     content = await file.read(MAX_SOURCE_BYTES + 1)
     if len(content) > MAX_SOURCE_BYTES:
         raise HTTPException(
@@ -80,8 +84,8 @@ async def add_upload(
     except OversizedSourceError as exc:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail=str(exc)
-        )
+        ) from exc
     except SourceIngestionError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        )
+        ) from exc

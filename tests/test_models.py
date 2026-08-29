@@ -18,6 +18,7 @@ class AcademicEventCandidateTest(unittest.TestCase):
             "id": "candidate-1",
             "course_id": "course-1",
             "source_id": "source-1",
+            "source_revision_id": "revision-1",
             "kind": EventKind.ASSIGNMENT,
             "title": "Homework 1",
             "all_day_date": date(2026, 9, 3),
@@ -33,6 +34,7 @@ class AcademicEventCandidateTest(unittest.TestCase):
     def test_submitted_or_conflicting_candidate_requires_no_auto_import(self) -> None:
         self.assertFalse(self.candidate(submitted=True).eligible_for_auto_import)
         self.assertFalse(self.candidate(has_conflict=True).eligible_for_auto_import)
+        self.assertFalse(self.candidate(review_required=True).eligible_for_auto_import)
 
     def test_candidate_requires_exactly_one_schedule_shape(self) -> None:
         with self.assertRaises(ValidationError):

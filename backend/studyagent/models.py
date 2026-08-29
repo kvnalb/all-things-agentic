@@ -60,9 +60,25 @@ class Source(BaseModel):
     kind: SourceKind
     label: str
     url: AnyHttpUrl | None = None
+    current_revision_id: str | None = None
+    current_revision_fetched_at: datetime | None = None
+
+
+class SourceRevision(BaseModel):
+    id: str
+    source_id: str
+    run_id: str
+    content_hash: str
+    media_type: str
+    fetched_at: datetime
+    parser_version: str
     object_ref: str | None = None
-    content_hash: str | None = None
-    fetched_at: datetime | None = None
+    normalized_ref: str | None = None
+
+
+class IngestedSource(BaseModel):
+    source: Source
+    revision: SourceRevision
 
 
 class EventKind(StrEnum):
@@ -84,6 +100,7 @@ class AcademicEventCandidate(BaseModel):
     id: str
     course_id: str
     source_id: str
+    source_revision_id: str
     kind: EventKind
     title: str
     start_at: datetime | None = None
@@ -93,9 +110,12 @@ class AcademicEventCandidate(BaseModel):
     recurrence: list[str] = Field(default_factory=list)
     source_url: AnyHttpUrl | None = None
     evidence: str
+    evidence_start: int | None = Field(default=None, ge=0)
+    evidence_end: int | None = Field(default=None, ge=0)
     confidence: Confidence
     submitted: bool = False
     has_conflict: bool = False
+    review_required: bool = False
 
     @model_validator(mode="after")
     def validate_schedule(self) -> AcademicEventCandidate:
@@ -109,6 +129,14 @@ class AcademicEventCandidate(BaseModel):
             raise ValueError("end time must follow start time")
         if not self.evidence.strip():
             raise ValueError("candidate requires source evidence")
+        if (self.evidence_start is None) != (self.evidence_end is None):
+            raise ValueError("evidence offsets must be supplied together")
+        if (
+            self.evidence_start is not None
+            and self.evidence_end is not None
+            and self.evidence_end <= self.evidence_start
+        ):
+            raise ValueError("evidence end must follow evidence start")
         return self
 
     @property
@@ -117,8 +145,35 @@ class AcademicEventCandidate(BaseModel):
             self.confidence >= 0.90
             and not self.submitted
             and not self.has_conflict
+            and not self.review_required
             and bool(self.evidence.strip())
         )
+
+
+class ExtractionState(StrEnum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ExtractionRecord(BaseModel):
+    id: str
+    run_id: str
+    source_id: str
+    source_revision_id: str
+    state: ExtractionState
+    extractor_version: str
+    prompt_version: str
+    model: str
+    candidate_ids: list[str] = Field(default_factory=list)
+    error_code: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ExtractionResult(BaseModel):
+    record: ExtractionRecord
+    candidates: list[AcademicEventCandidate] = Field(default_factory=list)
 
 
 class CalendarBinding(BaseModel):
