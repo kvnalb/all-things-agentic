@@ -2,6 +2,16 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-28 — Bound Google access to an app-created calendar
+
+Issue: `#13`
+
+- **Before:** The setup shell could not connect Google, retain offline access, or recover its calendar safely.
+- **Decision:** Request identity, `calendar.app.created`, and the minimum `calendar.readonly` scope required for marker recovery; require a refresh token; enforce `STUDYAGENT_ALLOWED_EMAIL`; bind one-time state to an HttpOnly setup-session cookie; and store credentials through Secret Manager while keeping Firestore metadata non-secret.
+- **After:** A tested OAuth service validates one-time state, fails closed on incomplete grants, creates or recovers `StudyAgent — Fall 2026`, and sends an explicit test email only to the connected identity.
+- **Evidence:** Focused fakes verify exact scopes, offline consent, token redaction, invalid/replayed/expired state, missing refresh tokens, calendar idempotency, and explicit email send without a live account.
+- **Limitation:** Live Cloud Run verification still requires project configuration; External/Testing refresh tokens expire after seven days under current Google policy.
+
 ## 2026-08-28 — Establish one deployable application boundary
 
 Issue: `#6`
