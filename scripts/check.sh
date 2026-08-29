@@ -11,9 +11,13 @@ for required_file in AGENTS.md docs/devlog.md docs/demo-script.md; do
 done
 
 if [ -d tests ] && find tests -type f -name 'test_*.py' -print -quit | grep -q .; then
-  python3 -m unittest discover -s tests -p 'test_*.py'
+  uv run python -m unittest discover -s tests -p 'test_*.py'
 else
   echo "no Python product tests found; permitted before the application scaffold"
+fi
+
+if [ -f frontend/package.json ]; then
+  pnpm --dir frontend build
 fi
 
 tracked_secrets=$(git ls-files | grep -E '(^|/)(\.env|[^/]+\.(pem|key|p12))$' | grep -vE '(^|/)\.env\.example$' || true)

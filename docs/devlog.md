@@ -2,6 +2,16 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-28 — Establish one deployable application boundary
+
+Issue: `#6`
+
+- **Before:** The repository contained planning and workflow documents but no runnable product scaffold or shared contracts.
+- **Decision:** Serve a React/Vite interface and FastAPI/ADK backend from one Cloud Run container, with strict Pydantic contracts between probabilistic extraction and deterministic actions.
+- **After:** The application has a buildable visual shell, health/setup APIs, validated domain contracts, and focused backend/frontend checks.
+- **Evidence:** `make check` (7 tests plus frontend production build), a successful Docker build, and live container checks for `/api/health` and the compiled frontend.
+- **Limitation:** Provider connections and imports remain explicitly disabled until their focused issues land.
+
 ## 2026-08-28 — Use a lightweight agent-merge workflow
 
 Issue: `#3`
