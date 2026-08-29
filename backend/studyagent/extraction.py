@@ -112,24 +112,31 @@ class AdkGeminiModel:
         message = types.Content(role="user", parts=[types.Part.from_text(text=prompt)])
         final_text: str | None = None
         try:
-            async with asyncio.timeout(MODEL_TIMEOUT_SECONDS):
-                async for event in self._runner.run_async(
-                    user_id=user_id,
-                    session_id=session_id,
-                    new_message=message,
-                    run_config=RunConfig(max_llm_calls=1),
-                ):
-                    if event.content:
-                        text_parts = [
-                            part.text for part in event.content.parts if part.text
-                        ]
-                        if text_parts:
-                            final_text = "".join(text_parts)
-        except TimeoutError as exc:
-            raise ExtractionError("event extraction timed out") from exc
-        if final_text is None:
-            raise ExtractionError("event extraction returned no structured output")
-        return final_text
+            try:
+                async with asyncio.timeout(MODEL_TIMEOUT_SECONDS):
+                    async for event in self._runner.run_async(
+                        user_id=user_id,
+                        session_id=session_id,
+                        new_message=message,
+                        run_config=RunConfig(max_llm_calls=1),
+                    ):
+                        if event.content:
+                            text_parts = [
+                                part.text for part in event.content.parts if part.text
+                            ]
+                            if text_parts:
+                                final_text = "".join(text_parts)
+            except TimeoutError as exc:
+                raise ExtractionError("event extraction timed out") from exc
+            if final_text is None:
+                raise ExtractionError("event extraction returned no structured output")
+            return final_text
+        finally:
+            await self._sessions.delete_session(
+                app_name="studyagent",
+                user_id=user_id,
+                session_id=session_id,
+            )
 
 
 class EventExtractor:

@@ -351,7 +351,8 @@ class SourceIngestionService:
 
     async def add_url(self, *, course_id: str, label: str, url: str) -> Source:
         fetched = await self._fetcher.fetch(url)
-        parsed = self._parser.parse(
+        parsed = await asyncio.to_thread(
+            self._parser.parse,
             content=fetched.content,
             filename=httpx.URL(url).path,
             media_type=fetched.media_type,
@@ -378,7 +379,8 @@ class SourceIngestionService:
         content: bytes,
         media_type: str | None,
     ) -> Source:
-        parsed = self._parser.parse(
+        parsed = await asyncio.to_thread(
+            self._parser.parse,
             content=content,
             filename=filename,
             media_type=media_type,

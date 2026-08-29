@@ -1,3 +1,4 @@
+import threading
 import unittest
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -12,7 +13,9 @@ from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from studyagent.api.sources import get_source_service, router
 from studyagent.connectors.sources import (
     MAX_SOURCE_BYTES,
+    FetchedDocument,
     OversizedSourceError,
+    ParsedDocument,
     SafeUrlFetcher,
     SnapshotStore,
     SourceIngestionService,
@@ -61,6 +64,52 @@ class FakeModel:
     async def generate(self, prompt: str) -> str:
         self.prompts.append(prompt)
         return self.output
+
+
+class TrackingParser(SourceParser):
+    def __init__(self) -> None:
+        self.thread_ids: list[int] = []
+
+    def parse(
+        self,
+        *,
+        content: bytes,
+        filename: str,
+        media_type: str | None,
+    ) -> ParsedDocument:
+        self.thread_ids.append(threading.get_ident())
+        return super().parse(
+            content=content,
+            filename=filename,
+            media_type=media_type,
+        )
+
+
+class StaticFetcher:
+    async def fetch(self, _: str) -> FetchedDocument:
+        return FetchedDocument(content=b"Course schedule", media_type="text/plain")
+
+
+class FakeSessionService:
+    def __init__(self) -> None:
+        self.created: list[tuple[str, str, str]] = []
+        self.deleted: list[tuple[str, str, str]] = []
+
+    async def create_session(
+        self, *, app_name: str, user_id: str, session_id: str
+    ) -> None:
+        self.created.append((app_name, user_id, session_id))
+
+    async def delete_session(
+        self, *, app_name: str, user_id: str, session_id: str
+    ) -> None:
+        self.deleted.append((app_name, user_id, session_id))
+
+
+class EmptyRunner:
+    async def run_async(self, **_):
+        if False:
+            yield None
 
 
 class SourceParserTest(unittest.TestCase):
@@ -195,6 +244,29 @@ class SourceIngestionServiceTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(repeated.id, source.id)
 
+    async def test_parsing_is_offloaded_for_urls_and_uploads(self) -> None:
+        parser = TrackingParser()
+        service = SourceIngestionService(
+            store=MemorySnapshotStore(),
+            fetcher=StaticFetcher(),
+            parser=parser,
+        )
+        await service.add_upload(
+            course_id="cs-101",
+            filename="syllabus.txt",
+            content=b"Course schedule",
+            media_type="text/plain",
+        )
+        await service.add_url(
+            course_id="cs-101",
+            label="Syllabus",
+            url="https://classes.example.edu/syllabus.txt",
+        )
+        self.assertEqual(len(parser.thread_ids), 2)
+        self.assertTrue(
+            all(thread_id != threading.get_ident() for thread_id in parser.thread_ids)
+        )
+
 
 class SourceRouterTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -286,6 +358,18 @@ class EventExtractorTest(unittest.IsolatedAsyncioTestCase):
         model = AdkGeminiModel()
         self.assertEqual(model.agent.tools, [])
         self.assertIsNotNone(model.agent.output_schema)
+
+    async def test_adk_session_is_deleted_when_generation_fails(self) -> None:
+        model = AdkGeminiModel()
+        sessions = FakeSessionService()
+        model._sessions = sessions
+        model._runner = EmptyRunner()
+
+        with self.assertRaises(ExtractionError):
+            await model.generate("No scheduled events")
+
+        self.assertEqual(len(sessions.created), 1)
+        self.assertEqual(sessions.deleted, sessions.created)
 
 
 if __name__ == "__main__":
