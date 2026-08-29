@@ -2,6 +2,16 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-28 — Make credential setup explicit and reproducible
+
+Issue: `#13`
+
+- **Before:** Canvas and Google Cloud prerequisites were implicit, making it unclear which tokens, APIs, OAuth scopes, secrets, and runtime roles the real demo required.
+- **Decision:** Document one owner-only setup using a Canvas personal token, Vertex AI, private source storage, Calendar-only OAuth, Secret Manager, and a least-privilege Cloud Run identity; exclude Gmail.
+- **After:** `docs/setup_guide.md` provides ordered console steps, copyable commands, safe secret handling, exact permissions, and non-secret readiness checks.
+- **Evidence:** `make check` passed with 37 backend tests and the production frontend build.
+- **Limitation:** The guide provisions credentials and infrastructure; live connector verification still occurs in issue `#8` without recording private values.
+
 ## 2026-08-28 — Bound source ingestion and model extraction
 
 Issue: `#9`
