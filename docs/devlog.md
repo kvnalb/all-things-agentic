@@ -2,6 +2,16 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-28 — Bound source ingestion and model extraction
+
+Issue: `#9`
+
+- **Before:** Course pages and syllabus files had no safe ingestion path or constrained bridge into Gemini.
+- **Decision:** Reject redirects and non-public network destinations, retain immutable raw and normalized revisions, and separate a versioned tool-free Gemini prompt from ADK execution and deterministic validation. Model-extracted events always require review.
+- **After:** Public URLs and PDF/HTML/Markdown/text uploads are bounded and privately persisted with reusable revision and extraction provenance rather than discarded after event extraction.
+- **Evidence:** Focused SSRF/deadline, content-signature, revision identity, partial persistence, prompt boundary, schema, timezone, recurrence, and manual-review tests included in `make check`.
+- **Limitation:** Live Cloud Storage, Firestore, and Vertex AI verification is deferred to issue `#8`. DNS is validated before connection but not pinned through TLS; production multi-user egress should enforce destination IP policy at connect time.
+
 ## 2026-08-28 — Establish one deployable application boundary
 
 Issue: `#6`
