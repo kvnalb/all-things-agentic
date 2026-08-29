@@ -1,0 +1,22 @@
+[
+  {
+    "id": 501,
+    "name": "Problem Set 1",
+    "due_at": "2026-09-04T23:59:00-07:00",
+    "html_url": "https://bcourses.berkeley.edu/courses/101/assignments/501",
+    "submission_types": ["online_upload"],
+    "submission": {"workflow_state": "unsubmitted", "submitted_at": null}
+  },
+  {
+    "id": 502,
+    "name": "Reading Quiz 1",
+    "due_at": "2026-09-05T17:00:00-07:00",
+    "html_url": "https://bcourses.berkeley.edu/courses/101/assignments/502",
+    "submission_types": ["online_quiz"],
+    "submission": {
+      "workflow_state": "submitted",
+      "submitted_at": "2026-09-05T16:42:00-07:00",
+      "attempt": 1
+    }
+  }
+]

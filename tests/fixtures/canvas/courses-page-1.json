@@ -1,0 +1,10 @@
+[
+  {
+    "id": 101,
+    "name": "Introduction to Reliable Agents",
+    "course_code": "CS 194-RA",
+    "workflow_state": "available",
+    "term": {"id": 26, "name": "Fall 2026"},
+    "syllabus_body": "<p>See the weekly schedule.</p>"
+  }
+]

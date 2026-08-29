@@ -1,0 +1,17 @@
+[
+  {
+    "id": 202,
+    "name": "Human-Centered Computing",
+    "course_code": "INFO 213",
+    "workflow_state": "available",
+    "term": {"id": 26, "name": "Fall '26"},
+    "syllabus_body": "<p>Project studio meets Friday.</p>"
+  },
+  {
+    "id": 303,
+    "name": "Archived Seminar",
+    "course_code": "ARCH 100",
+    "workflow_state": "available",
+    "term": {"id": 25, "name": "Fall 2025"}
+  }
+]

@@ -2,6 +2,16 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-28 — Read structured bCourses dates deterministically
+
+Issue: `#7`
+
+- **Before:** StudyAgent had a Canvas connection state but could not validate bCourses credentials or discover real course work.
+- **Decision:** Keep the personal access token request-scoped, follow only same-origin Canvas pagination links, and convert structured Canvas dates directly into confidence-1 event candidates without invoking Gemini.
+- **After:** The isolated Canvas adapter discovers Fall 2026 courses, syllabi, assignments, quizzes, calendar events, and submission states; submitted work is marked ineligible for outstanding-work import.
+- **Evidence:** Focused synthetic-fixture tests cover invalid credentials, Link-header pagination, course selection, structured date conversion, and submitted quiz handling.
+- **Limitation:** The router is intentionally not registered until the connector PRs integrate; new-quiz behavior still depends on Canvas exposing its linked assignment through the standard APIs.
+
 ## 2026-08-28 — Establish one deployable application boundary
 
 Issue: `#6`
