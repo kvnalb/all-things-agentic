@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 import httpx
 from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError
@@ -221,14 +221,14 @@ class CanvasClient:
 
     def list_assignments(self, course_id: int | str) -> list[CanvasAssignment]:
         return self._get_paginated(
-            f"/api/v1/courses/{course_id}/assignments",
+            f"/api/v1/courses/{quote(str(course_id), safe='')}/assignments",
             params={"include[]": "submission", "per_page": 100},
             model=CanvasAssignment,
         )
 
     def list_quizzes(self, course_id: int | str) -> list[CanvasQuiz]:
         return self._get_paginated(
-            f"/api/v1/courses/{course_id}/quizzes",
+            f"/api/v1/courses/{quote(str(course_id), safe='')}/quizzes",
             params={"per_page": 100},
             model=CanvasQuiz,
         )
@@ -246,7 +246,8 @@ class CanvasClient:
 
     def get_course(self, course_id: int | str) -> CanvasCourse:
         payload = self._get_json(
-            f"/api/v1/courses/{course_id}", params={"include[]": "syllabus_body"}
+            f"/api/v1/courses/{quote(str(course_id), safe='')}",
+            params={"include[]": "syllabus_body"},
         )
         try:
             return CanvasCourse.model_validate(payload)
@@ -277,12 +278,13 @@ class CanvasClient:
     def selected_activity(
         self, discovery: CanvasDiscovery, selected_course_ids: list[str]
     ) -> list[CanvasCourseActivity]:
-        selected = set(selected_course_ids)
+        selected_in_order = list(dict.fromkeys(selected_course_ids))
+        selected = set(selected_in_order)
         known = {str(course.id): course for course in discovery.courses}
         unknown = selected - known.keys()
         if unknown:
             raise CanvasSelectionError("One or more selected Canvas courses were not discovered")
-        return [self.fetch_course_activity(known[course_id]) for course_id in selected_course_ids]
+        return [self.fetch_course_activity(known[course_id]) for course_id in selected_in_order]
 
     @staticmethod
     def to_event_candidates(
@@ -440,9 +442,12 @@ class CanvasClient:
         if not next_link:
             return None
         next_url = urljoin(str(response.request.url), next_link["url"])
-        parsed = urlparse(next_url)
-        expected_port = self._origin.port or 443
-        actual_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        try:
+            parsed = urlparse(next_url)
+            expected_port = self._origin.port or 443
+            actual_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        except ValueError as exc:
+            raise CanvasAPIError("Canvas returned an unsafe pagination link") from exc
         if (
             parsed.scheme != "https"
             or parsed.hostname != self._origin.hostname
