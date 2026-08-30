@@ -13,7 +13,16 @@ from .canvas import Canvas
 from .cloud import Settings, State
 from .google import Google
 from .models import EffortFeedback, UserConfig
-from .store import load_daily_view, load_task_list
+from .store import (
+    export_schedule_csv,
+    list_calendar_audit,
+    list_canonical,
+    list_claims,
+    load_coverage,
+    load_daily_view,
+    load_registry_summary,
+    load_task_list,
+)
 from .service import TaskmasterService
 
 
@@ -83,6 +92,42 @@ async def feedback(body: EffortFeedback) -> dict:
 @router.get("/api/activity", dependencies=[Depends(require_owner)])
 async def activity() -> list[dict]:
     return await asyncio.to_thread(State().activity)
+
+
+@router.get("/api/registry/summary", dependencies=[Depends(require_owner)])
+async def registry_summary() -> dict:
+    return await asyncio.to_thread(load_registry_summary)
+
+
+@router.get("/api/claims", dependencies=[Depends(require_owner)])
+async def claims(course: str | None = None) -> list[dict]:
+    return await asyncio.to_thread(list_claims, course=course)
+
+
+@router.get("/api/schedule", dependencies=[Depends(require_owner)])
+async def schedule(status: str | None = None) -> list[dict]:
+    return await asyncio.to_thread(list_canonical, status=status)
+
+
+@router.get("/api/dues", dependencies=[Depends(require_owner)])
+async def dues(status: str | None = None) -> list[dict]:
+    return await asyncio.to_thread(list_canonical, status=status)
+
+
+@router.get("/api/dues/export.csv", dependencies=[Depends(require_owner)])
+async def dues_export() -> Response:
+    payload = await asyncio.to_thread(export_schedule_csv)
+    return Response(content=payload, media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="studyagent-schedule.csv"'})
+
+
+@router.get("/api/coverage", dependencies=[Depends(require_owner)])
+async def coverage() -> dict:
+    return await asyncio.to_thread(load_coverage)
+
+
+@router.get("/api/calendar-events", dependencies=[Depends(require_owner)])
+async def calendar_events() -> list[dict]:
+    return await asyncio.to_thread(list_calendar_audit)
 
 
 @router.post("/internal/sync")

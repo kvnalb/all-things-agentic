@@ -12,9 +12,10 @@ from .donor.syllabus import analyze_all_courses
 from .donor.task_list import write_task_list
 from .donor.taskmaster_calendar import _prepare_tasks, rebuild_calendar_and_brief
 from .google import CalendarWriter
-from .models import Task
+from .models import ClaimStatus, Task
+from .registry import build_registry
 from .runner import TaskmasterRunner
-from .store import save_daily_view
+from .store import save_daily_view, save_registry
 
 
 ESTIMATE_CONCURRENCY = 6
@@ -45,6 +46,31 @@ def _apply_estimate(task: DonorTask, result: dict) -> DonorTask:
     return task
 
 
+def _briefing_from_canonical(registry: dict) -> list[dict]:
+    briefing = []
+    for item in registry["canonical"]:
+        if item.status != ClaimStatus.READY or item.due_at is None:
+            continue
+        due_local = item.due_at.astimezone()
+        briefing.append(
+            {
+                "task_key": item.chosen_claim_id or item.id,
+                "title": item.title,
+                "course": item.course_label,
+                "due": f"{due_local:%a %b %d %I:%M %p}",
+                "_due_dt": due_local,
+                "rank": 0,
+                "estimated_hours": None,
+                "budgeted_hours": 2.0,
+                "blocks": 0,
+                "fully_scheduled": False,
+                "priority_course": False,
+                "from_syllabus": "syllabus" in "".join(item.sources),
+            }
+        )
+    return briefing
+
+
 class TaskmasterService:
     def __init__(self) -> None:
         self.state = State()
@@ -60,14 +86,52 @@ class TaskmasterService:
             "tasks": 0,
             "estimate_failures": 0,
             "syllabus_courses": 0,
+            "claims": 0,
+            "canonical_ready": 0,
+            "conflicts": 0,
+            "review_required": 0,
+            "calendar_writes": False,
         }
         try:
             cfg = load_config()
-            profile = await asyncio.to_thread(load_profile)
+            user_config = self.state.config()
+            calendar_writes = user_config.calendar_writes_enabled
+            summary["calendar_writes"] = calendar_writes
+
             syllabus = await asyncio.to_thread(analyze_all_courses)
             summary["syllabus_courses"] = len(syllabus)
             run_ref.set({"stage": "syllabus_analyzed", "summary": summary}, merge=True)
 
+            registry = await asyncio.to_thread(build_registry, cfg, run_id=run_id, syllabus_data=syllabus)
+            await asyncio.to_thread(
+                save_registry,
+                run_id=run_id,
+                claims=registry["claims"],
+                canonical=registry["canonical"],
+                coverage=registry["coverage"],
+            )
+            summary.update(registry["summary"])
+            run_ref.set({"stage": "registry_built", "summary": summary}, merge=True)
+
+            if not calendar_writes:
+                briefing = _briefing_from_canonical(registry)
+                skipped = [f"{row.title} ({row.course_label})" for row in registry["canonical"] if row.status != ClaimStatus.READY]
+                await asyncio.to_thread(write_task_list, briefing, skipped, cfg)
+                daily = await asyncio.to_thread(build_daily_view, briefing, cfg)
+                await asyncio.to_thread(save_daily_view, daily)
+                run_ref.set(
+                    {
+                        "state": "completed",
+                        "stage": "completed",
+                        "completed_at": datetime.now(UTC),
+                        "summary": summary,
+                        "daily": daily,
+                    },
+                    merge=True,
+                )
+                return {"run_id": run_id, **summary, "daily": daily, "registry_mode": True}
+
+            profile = await asyncio.to_thread(load_profile)
             kept, skipped = await asyncio.to_thread(_prepare_tasks, cfg)
             semaphore = asyncio.Semaphore(ESTIMATE_CONCURRENCY)
             estimated = await asyncio.gather(*(self._estimate(task, cfg, profile, semaphore) for task in kept))
@@ -106,7 +170,7 @@ class TaskmasterService:
                 },
                 merge=True,
             )
-            return {"run_id": run_id, **summary, "daily": daily}
+            return {"run_id": run_id, **summary, "daily": daily, "registry_mode": False}
         except Exception as exc:
             run_ref.set(
                 {"state": "failed", "completed_at": datetime.now(UTC), "error_code": type(exc).__name__},

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .cloud import State
-from .models import UserConfig
+from .models import AcademicClaim, CanonicalScheduleItem, RegistrySummary, UserConfig
 
 
 def load_config_dict() -> dict[str, Any]:
@@ -24,6 +24,7 @@ def load_config_dict() -> dict[str, Any]:
         "non_canvas_courses": "",
         "daily_cap_hours": config.daily_cap_hours,
         "effort_padding": config.effort_padding,
+        "calendar_writes_enabled": config.calendar_writes_enabled,
     }
 
 
@@ -42,6 +43,7 @@ def save_config_dict(value: dict[str, Any]) -> None:
             excluded_courses=[str(item) for item in value.get("excluded_courses", current.excluded_courses)],
             daily_cap_hours=float(value.get("daily_cap_hours", current.daily_cap_hours)),
             effort_padding=float(value.get("effort_padding", current.effort_padding)),
+            calendar_writes_enabled=bool(value.get("calendar_writes_enabled", current.calendar_writes_enabled)),
         )
     )
 
@@ -78,3 +80,105 @@ def load_daily_view() -> dict[str, Any]:
         "active": [],
         "upcoming": [],
     }
+
+
+def save_registry(
+    *,
+    run_id: str,
+    claims: list[AcademicClaim],
+    canonical: list[CanonicalScheduleItem],
+    coverage: dict[str, Any],
+) -> None:
+    db = State().db
+    batch = db.batch()
+    for claim in claims:
+        ref = db.collection("claims").document(claim.id)
+        batch.set(ref, {**claim.model_dump(mode="json"), "run_id": run_id, "updated_at": datetime.now(UTC)})
+    for item in canonical:
+        ref = db.collection("canonical").document(item.id)
+        batch.set(ref, {**item.model_dump(mode="json"), "run_id": run_id, "updated_at": datetime.now(UTC)})
+    batch.commit()
+    summary = RegistrySummary(
+        run_id=run_id,
+        claims=len(claims),
+        canonical_total=len(canonical),
+        canonical_ready=coverage.get("canonical_ready", 0),
+        conflicts=coverage.get("conflicts", 0),
+        review_required=coverage.get("review_required", 0),
+        skipped_claims=coverage.get("skipped_claims", 0),
+        updated_at=datetime.now(UTC),
+    )
+    db.collection("artifacts").document("registry").set(
+        {
+            **summary.model_dump(mode="json"),
+            "coverage": coverage,
+            "updated_at": datetime.now(UTC),
+        }
+    )
+
+
+def load_registry_summary() -> dict[str, Any]:
+    return State().db.collection("artifacts").document("registry").get().to_dict() or {}
+
+
+def list_claims(*, course: str | None = None, limit: int = 500) -> list[dict[str, Any]]:
+    snaps = State().db.collection("claims").limit(limit).stream()
+    rows = [snap.to_dict() for snap in snaps]
+    if course:
+        needle = course.casefold()
+        rows = [row for row in rows if needle in str(row.get("course_label", "")).casefold()]
+    rows.sort(key=lambda row: (str(row.get("course_label", "")), str(row.get("title", ""))))
+    return rows
+
+
+def list_canonical(*, status: str | None = None, limit: int = 500) -> list[dict[str, Any]]:
+    snaps = State().db.collection("canonical").limit(limit).stream()
+    rows = [snap.to_dict() for snap in snaps]
+    if status:
+        rows = [row for row in rows if row.get("status") == status]
+    rows.sort(key=lambda row: (row.get("due_at") or "", str(row.get("title", ""))))
+    return rows
+
+
+def load_coverage() -> dict[str, Any]:
+    payload = load_registry_summary()
+    return payload.get("coverage") or {"courses": [], "selected_courses": 0}
+
+
+def list_calendar_audit(*, limit: int = 100) -> list[dict[str, Any]]:
+    rows = []
+    for snap in State().db.collection("calendar_bindings").limit(limit).stream():
+        row = snap.to_dict() or {}
+        row["binding_id"] = snap.id
+        rows.append(row)
+    rows.sort(key=lambda row: str(row.get("synced_at") or row.get("attempted_at") or ""), reverse=True)
+    return rows
+
+
+def export_schedule_csv() -> str:
+    lines = ["course,title,kind,due_at,status,sources,merge_reason,chosen_claim_id"]
+    for row in list_canonical(limit=2000):
+        due = row.get("due_at") or ""
+        sources = "|".join(row.get("sources") or [])
+        lines.append(
+            ",".join(
+                [
+                    _csv_cell(row.get("course_label")),
+                    _csv_cell(row.get("title")),
+                    _csv_cell(row.get("kind")),
+                    _csv_cell(due),
+                    _csv_cell(row.get("status")),
+                    _csv_cell(sources),
+                    _csv_cell(row.get("merge_reason")),
+                    _csv_cell(row.get("chosen_claim_id")),
+                ]
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _csv_cell(value: object) -> str:
+    text = str(value or "")
+    if any(char in text for char in [",", '"', "\n"]):
+        return '"' + text.replace('"', '""') + '"'
+    return text

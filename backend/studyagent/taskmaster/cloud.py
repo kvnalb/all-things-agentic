@@ -81,7 +81,16 @@ class State:
     def status(self) -> dict:
         runs = list(self.db.collection("runs").order_by("started_at", direction=firestore.Query.DESCENDING).limit(1).stream())
         last = runs[0].to_dict() if runs else None
-        return {"google_connected": self.db.collection("connections").document("google").get().exists, "canvas_connected": bool(self.config().selected_course_ids), "last_run": last, "next_sync_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat()}
+        config = self.config()
+        registry = self.db.collection("artifacts").document("registry").get().to_dict() or {}
+        return {
+            "google_connected": self.db.collection("connections").document("google").get().exists,
+            "canvas_connected": bool(config.selected_course_ids),
+            "calendar_writes_enabled": config.calendar_writes_enabled,
+            "registry": registry,
+            "last_run": last,
+            "next_sync_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+        }
 
     def activity(self, limit: int = 20) -> list[dict]:
         return [snap.to_dict() for snap in self.db.collection("runs").order_by("started_at", direction=firestore.Query.DESCENDING).limit(limit).stream()]

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from enum import StrEnum
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -42,6 +43,78 @@ class UserConfig(BaseModel):
     excluded_courses: list[str] = Field(default_factory=list)
     daily_cap_hours: float = Field(default=4, ge=0.5, le=24)
     effort_padding: float = Field(default=1.2, ge=1, le=2)
+    calendar_writes_enabled: bool = False
+
+
+class ClaimProvenance(StrEnum):
+    CANVAS_ASSIGNMENT = "canvas_assignment"
+    SYLLABUS_VERIFIED = "syllabus_verified"
+    SYLLABUS_LLM = "syllabus_llm"
+    EXTRACTION = "extraction"
+    MANUAL = "manual"
+
+
+class ClaimStatus(StrEnum):
+    ACTIVE = "active"
+    SKIPPED = "skipped"
+    REVIEW_REQUIRED = "review_required"
+    READY = "ready"
+    CONFLICTING = "conflicting"
+
+
+class EventKind(StrEnum):
+    ASSIGNMENT = "assignment"
+    EXAM = "exam"
+    PROJECT = "project"
+    QUIZ = "quiz"
+    LECTURE = "lecture"
+    OFFICE_HOURS = "office_hours"
+    OTHER = "other"
+
+
+class AcademicClaim(BaseModel):
+    id: str
+    course_id: str | None = None
+    course_label: str
+    title: str
+    kind: EventKind = EventKind.ASSIGNMENT
+    due_at: datetime | None = None
+    provenance: ClaimProvenance
+    source_ref: str
+    source_url: str | None = None
+    source_revision_id: str | None = None
+    evidence: str | None = None
+    confidence: str | None = None
+    points_possible: float | None = None
+    status: ClaimStatus = ClaimStatus.ACTIVE
+    skip_reason: str | None = None
+
+
+class CanonicalScheduleItem(BaseModel):
+    id: str
+    group_key: str
+    title: str
+    course_id: str | None = None
+    course_label: str
+    kind: EventKind = EventKind.ASSIGNMENT
+    due_at: datetime | None = None
+    claim_ids: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    status: ClaimStatus
+    chosen_claim_id: str | None = None
+    merge_reason: str | None = None
+    conflict_details: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RegistrySummary(BaseModel):
+    run_id: str
+    claims: int = 0
+    canonical_total: int = 0
+    canonical_ready: int = 0
+    conflicts: int = 0
+    review_required: int = 0
+    skipped_claims: int = 0
+    updated_at: datetime | None = None
 
 
 class StudyBlock(BaseModel):

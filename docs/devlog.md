@@ -2,6 +2,16 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-30 — P1 claims registry (truth before calendar)
+
+Branch: `exp/semester-agent`
+
+- **Before:** Sync wrote study blocks directly to Google Calendar from a thin Canvas assignments + syllabus path, with no auditable multi-source due registry and no way to review conflicts before writes.
+- **Decision:** Introduce `claims` + `canonical` Firestore collections with merge logic (corroboration, conflicts, review_required). Gate calendar writes behind `calendar_writes_enabled` (default off). Dashboard shows Schedule queue, All claims, and Coverage tabs plus CSV export.
+- **After:** `sync_semester` builds and persists the registry first; when calendar writes are disabled, ADK estimation and Google writes are skipped. APIs: `/api/claims`, `/api/schedule`, `/api/dues`, `/api/coverage`, `/api/calendar-events`, `/api/dues/export.csv`.
+- **Evidence:** `tests/test_registry.py`, `make check` (62 tests).
+- **Limitation:** Canvas ingest is still assignments + syllabus only (no calendar events/modules yet). Conflict resolution is view-only; course-site extraction not merged into claims.
+
 ## 2026-08-30 — Effort calibration from owner feedback
 
 Issue: `#5`

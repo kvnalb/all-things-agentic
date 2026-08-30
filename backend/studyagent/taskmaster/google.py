@@ -68,6 +68,17 @@ class CalendarWriter:
             task = placement["task"]; task_key = f"{task.source}:{task.source_ref}"
             key = f"work:{task_key}:{placement['block_index']}"; desired.add(key)
             start, end = placement["start"], placement["end"]; due_local = task.due_at.astimezone()
+            days_out = max((due_local - start).total_seconds() / 86400, 0)
+            audit = placement.get("audit") or {
+                "event_kind": "study_block",
+                "course_label": task.course or "",
+                "task_key": task_key,
+                "due_item_id": task_key,
+                "reasoning_note": (
+                    f"rank={task.priority_score}; color={placement['color_id']}; "
+                    f"days_to_due={days_out:.1f}; block={placement['block_index']}"
+                ),
+            }
             body = {
                 "summary": f"Work: {task.title} ({task.course})",
                 "description": (
@@ -78,11 +89,7 @@ class CalendarWriter:
                 "end": {"dateTime": end.isoformat()},
                 "colorId": placement["color_id"],
             }
-            counts[self._write(service, calendar_id, key, body, run_id)] += 1
-        counts["deleted"] = self._delete_stale(service, calendar_id, desired, run_id)
-        return counts
-
-    def sync(self, tasks: list[Task], blocks: list[StudyBlock], run_id: str) -> dict[str, int]:
+            counts[self._write(service, calendar_id, key, body, run_id, audit=audit)] += 1
         connection = self.state.connection(); calendar_id = connection.get("calendar_id")
         if not calendar_id: raise RuntimeError("Google is not connected")
         service = build("calendar", "v3", credentials=Google().credentials(), cache_discovery=False); counts = {"created": 0, "updated": 0, "skipped": 0, "deleted": 0}; desired: set[str] = set()
@@ -115,7 +122,7 @@ class CalendarWriter:
             snapshot.reference.delete(); deleted += 1
         return deleted
 
-    def _write(self, service, calendar_id: str, key: str, body: dict, run_id: str) -> str:
+    def _write(self, service, calendar_id: str, key: str, body: dict, run_id: str, *, audit: dict | None = None) -> str:
         digest = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest(); doc_id = hashlib.sha256(key.encode()).hexdigest()[:24]
         ref = self.db.collection("calendar_bindings").document(doc_id); binding = ref.get().to_dict() or {}
         if binding.get("desired_hash") == digest: return "skipped"
@@ -125,10 +132,24 @@ class CalendarWriter:
             # by sync() before calling this helper.
             private.update(body.pop("_private", {}))
         body["extendedProperties"] = {"private": private}
-        ref.set({"key": key, "state": "writing", "desired_hash": digest, "run_id": run_id, "attempted_at": datetime.now(UTC)}, merge=True)
+        payload = {"key": key, "state": "writing", "desired_hash": digest, "run_id": run_id, "attempted_at": datetime.now(UTC)}
+        if audit:
+            payload.update(audit)
+        ref.set(payload, merge=True)
         if binding.get("google_event_id"):
             result = service.events().patch(calendarId=calendar_id, eventId=binding["google_event_id"], body=body).execute(); action = "updated"
         else:
             result = service.events().insert(calendarId=calendar_id, body=body).execute(); action = "created"
-        ref.set({"key": key, "google_event_id": result["id"], "desired_hash": digest, "run_id": run_id, "state": "synced", "synced_at": datetime.now(UTC)})
+        synced = {
+            "key": key,
+            "google_event_id": result["id"],
+            "desired_hash": digest,
+            "run_id": run_id,
+            "state": "synced",
+            "synced_at": datetime.now(UTC),
+            "calendar_id": calendar_id,
+        }
+        if audit:
+            synced.update(audit)
+        ref.set(synced, merge=True)
         return action
