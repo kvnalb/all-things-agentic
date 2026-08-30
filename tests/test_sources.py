@@ -42,6 +42,9 @@ from studyagent.extraction import (
 from studyagent.agents.course_event_extractor import ModelRunError
 from studyagent.models import (
     AcademicEventCandidate,
+    DatePrecision,
+    Evidence,
+    ExtractionMethod,
     ExtractionRecord,
     ExtractionState,
     IngestedSource,
@@ -140,6 +143,27 @@ class FakeCollection:
 
     def document(self, document_id: str) -> FakeDocument:
         return FakeDocument(self.firestore, f"{self.path}/{document_id}")
+
+    def stream(self) -> list["FakeQueryDocumentSnapshot"]:
+        prefix = f"{self.path}/"
+        snapshots: list[FakeQueryDocumentSnapshot] = []
+        for path, value in sorted(self.firestore.values.items()):
+            if not path.startswith(prefix):
+                continue
+            remainder = path[len(prefix) :]
+            if "/" in remainder:
+                continue
+            snapshots.append(FakeQueryDocumentSnapshot(remainder, value))
+        return snapshots
+
+
+class FakeQueryDocumentSnapshot:
+    def __init__(self, document_id: str, value: dict) -> None:
+        self.id = document_id
+        self._value = value
+
+    def to_dict(self) -> dict:
+        return self._value
 
 
 class FakeFirestore:
@@ -634,10 +658,19 @@ class GoogleExtractionStoreTest(unittest.TestCase):
             kind="exam",
             title="Midterm",
             all_day_date="2026-09-24",
-            evidence="Midterm Sep 24",
-            evidence_start=0,
-            evidence_end=16,
-            confidence=0.98,
+            date_precision=DatePrecision.EXACT,
+            evidence=[
+                Evidence(
+                    field="all_day_date",
+                    source_id="source-1",
+                    source_revision_id="revision-1",
+                    method=ExtractionMethod.PROSE,
+                    confidence=0.98,
+                    excerpt="Midterm Sep 24",
+                    excerpt_start=0,
+                    excerpt_end=16,
+                )
+            ],
             review_required=True,
         )
         record = ExtractionRecord(
@@ -646,7 +679,7 @@ class GoogleExtractionStoreTest(unittest.TestCase):
             source_id="source-1",
             source_revision_id="revision-1",
             state=ExtractionState.COMPLETED,
-            extractor_version="event-extractor-v1",
+            extractor_version="event-extractor-v2",
             prompt_version="course-events-v1",
             model="fake-gemini",
             candidate_ids=[candidate.id],
@@ -754,7 +787,8 @@ class EventExtractorTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertFalse(candidates[0].eligible_for_auto_import)
         self.assertTrue(candidates[0].review_required)
-        self.assertEqual(candidates[0].evidence_start, 0)
+        self.assertEqual(candidates[0].evidence[0].excerpt_start, 0)
+        self.assertEqual(candidates[0].date_precision, DatePrecision.EXACT)
         self.assertEqual(result.record.prompt_version, COURSE_EVENT_PROMPT_VERSION)
         self.assertEqual(store.saved[-1][0].state, ExtractionState.COMPLETED)
         self.assertIn("<course_source>", model.prompts[0])
