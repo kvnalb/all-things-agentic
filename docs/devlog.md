@@ -2,6 +2,36 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-30 — Effort calibration from owner feedback
+
+Issue: `#5`
+
+- **Before:** Effort estimates came only from the one-shot LLM call; there was no way to correct systematic under/over-estimation per course.
+- **Decision:** Add a Firestore `calibration/owner` profile with EMA (exponential moving average — a running average that weights recent feedback more) multipliers per course and globally. Apply multipliers after `effort_agent`, before deterministic scheduling. Ranking formulas unchanged.
+- **After:** Dashboard tasks expose quick ratings plus optional actual hours; `POST /api/feedback` updates multipliers; next sync budgets adjusted hours and injects recent examples into the effort prompt.
+- **Evidence:** `tests/test_calibration.py`, `make check`.
+- **Limitation:** Syllabus difficulty is not yet user-calibratable; feedback does not auto re-sync the calendar until the next manual or scheduled sync.
+
+## 2026-08-29 — Replace the reimplementation with a verbatim donor port
+
+Issue: `#5`
+
+- **Before:** The first “donor port” reimplemented scheduling with `planning.py`, `extraction.py`, and a slim service layer. It dropped syllabus grounding, difficulty multipliers, the 7-question config semantics, `TASK_LIST` artifacts, donor daily tiers, and the reminder-agent path.
+- **Decision:** Copy co-submitter modules from `9120d1c` into `backend/studyagent/taskmaster/donor/` and patch only persistence/auth boundaries (`store.py`, Secret Manager Canvas token, Vertex syllabus analysis, idempotent `CalendarWriter.sync_donor_blocks`). Keep the existing GCP shell unchanged.
+- **After:** `TaskmasterService.sync_semester()` runs donor `analyze_all_courses` → ADK effort graph per task → donor `rebuild_calendar_and_brief` → `write_task_list` → `build_daily_view`, with Firestore artifacts replacing local JSON files.
+- **Evidence:** `make check` (49 tests), donor graph/scoring/calendar-binding regressions, and service wiring in `service.py`/`api.py`.
+- **Limitation:** One manual re-sync is required to replace low-quality calendar blocks from the old planner; live Fall ’26 verification still depends on owner GCP credentials.
+
+## 2026-08-29 — Port the proven Taskmaster into the GCP shell
+
+Issue: `#5`
+
+- **Before:** The canonical repo had safe source scaffolding but no complete student workflow; a custom integration was duplicating a co-submitter’s working agent.
+- **Decision:** Make co-submitter commit `9120d1c` the behavioral source of truth. Port onboarding, effort estimation, scoring, calendar planning, colors, daily tiers, and activity while replacing local files and calendar rebuilds with Secret Manager, Firestore, and stable bindings.
+- **After:** One Cloud Run service exposes owner setup, real Canvas discovery, source ingestion, manual/hourly sync, task/daily/activity views, and a corrected ADK 2 graph.
+- **Evidence:** Donor-parity and graph regression tests, `make check`, Cloud Run revision `studyagent-00004-6rp`, owner-guard `401`, and live discovery of seven Fall ’26 Canvas shells.
+- **Limitation:** Google OAuth consent, Calendar idempotency, and scheduled-run evidence must pass before submission.
+
 ## 2026-08-28 — Make credential setup explicit and reproducible
 
 Issue: `#13`

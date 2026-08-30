@@ -33,6 +33,7 @@ from studyagent.connectors.extractions import GoogleExtractionStore
 from studyagent.extraction import (
     MAX_MODEL_SOURCE_CHARACTERS,
     AdkGeminiModel,
+    ExtractionBatch,
     EventExtractor,
     ExtractionError,
     ExtractionStore,
@@ -710,6 +711,10 @@ class SourceRouterTest(unittest.TestCase):
 
 
 class EventExtractorTest(unittest.IsolatedAsyncioTestCase):
+    def test_extraction_validation_rejects_extra_fields(self) -> None:
+        with self.assertRaises(ValueError):
+            ExtractionBatch.model_validate({"events": [], "unexpected": True})
+
     def source(self) -> Source:
         return Source(
             id="source-1",
@@ -771,12 +776,12 @@ class EventExtractorTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_hallucinated_evidence_fails_closed(self) -> None:
         output = """{"events":[{"kind":"exam","title":"Midterm","all_day_date":"2026-09-24","evidence":"Midterm is September 24","confidence":0.95}]}"""
-        with self.assertRaises(ExtractionError):
-            await EventExtractor(FakeModel(output), MemoryExtractionStore()).extract(
-                source=self.source(),
-                revision=self.revision(),
-                normalized_text="Midterm date will be announced later.",
-            )
+        result = await EventExtractor(FakeModel(output), MemoryExtractionStore()).extract(
+            source=self.source(),
+            revision=self.revision(),
+            normalized_text="Midterm date will be announced later.",
+        )
+        self.assertEqual(result.candidates, [])
 
     async def test_oversized_model_input_is_not_sent(self) -> None:
         model = FakeModel('{"events":[]}')
@@ -818,6 +823,15 @@ class EventExtractorTest(unittest.IsolatedAsyncioTestCase):
                 normalized_text="Lecture Sep 24 at 6pm",
             )
         self.assertEqual(store.saved[-1][0].state, ExtractionState.FAILED)
+
+    async def test_invalid_optional_recurrence_is_removed_from_explicit_occurrence(self) -> None:
+        output = """{"events":[{"kind":"lecture","title":"Lecture","start_at":"2026-09-24T18:00:00-07:00","recurrence":["every Thursday"],"evidence":"Lecture Sep 24 at 6pm","confidence":0.99}]}"""
+        result = await EventExtractor(FakeModel(output), MemoryExtractionStore()).extract(
+            source=self.source(),
+            revision=self.revision(),
+            normalized_text="Lecture Sep 24 at 6pm",
+        )
+        self.assertEqual(result.candidates[0].recurrence, [])
 
     async def test_nonexistent_los_angeles_wall_time_fails_closed(self) -> None:
         output = """{"events":[{"kind":"exam","title":"Exam","start_at":"2026-03-08T02:30:00-08:00","evidence":"Exam March 8 at 2:30am","confidence":0.99}]}"""

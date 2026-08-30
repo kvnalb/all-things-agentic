@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 from datetime import UTC, date, datetime
@@ -124,6 +125,22 @@ class ExtractionBatch(BaseModel):
     )
 
 
+class _VertexEventDraft(BaseModel):
+    kind: EventKind
+    title: str
+    start_at: str | None = None
+    end_at: str | None = None
+    all_day_date: str | None = None
+    location: str | None = None
+    recurrence: list[str] = Field(default_factory=list)
+    evidence: str
+    confidence: float
+
+
+class _VertexExtractionBatch(BaseModel):
+    events: list[_VertexEventDraft] = Field(default_factory=list)
+
+
 class StructuredModel(Protocol):
     model_name: str
 
@@ -140,7 +157,7 @@ class ExtractionStore(Protocol):
 
 class AdkGeminiModel(_AdkGeminiModel):
     def __init__(self, *, model: str | None = None) -> None:
-        super().__init__(output_schema=ExtractionBatch, model=model)
+        super().__init__(output_schema=_VertexExtractionBatch, model=model)
 
 
 def build_extraction_prompt(*, normalized_text: str, term: str) -> str:
@@ -198,7 +215,13 @@ class EventExtractor:
 
         try:
             raw_output = await self._model.generate(prompt)
-            batch = ExtractionBatch.model_validate_json(raw_output)
+            raw_batch = json.loads(raw_output)
+            _VertexExtractionBatch.model_validate(raw_batch)
+            for event in raw_batch.get("events", []):
+                recurrence = event.get("recurrence") or []
+                if any(not _valid_rrule(value) for value in recurrence):
+                    event["recurrence"] = []
+            batch = ExtractionBatch.model_validate(raw_batch)
             candidates = self._candidates(
                 source=source,
                 revision=revision,
@@ -246,7 +269,7 @@ class EventExtractor:
         for draft in batch.events:
             evidence_start = normalized_text.find(draft.evidence)
             if evidence_start < 0:
-                raise ExtractionError("event evidence was not found in the source")
+                continue
             evidence_end = evidence_start + len(draft.evidence)
             digest = hashlib.sha256(
                 f"{revision.id}:{draft.model_dump_json()}".encode()
