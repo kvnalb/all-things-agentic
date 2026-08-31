@@ -8,6 +8,8 @@ from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 
+from pydantic import BaseModel
+
 from .calibration import load_profile, profile_summary, record_feedback
 from .canvas import Canvas
 from .cloud import Settings, State
@@ -18,10 +20,13 @@ from .store import (
     list_calendar_audit,
     list_canonical,
     list_claims,
+    list_timed_events,
+    load_config_dict,
     load_coverage,
     load_daily_view,
     load_registry_summary,
     load_task_list,
+    save_config_dict,
 )
 from .service import TaskmasterService
 
@@ -61,6 +66,18 @@ async def connect_canvas() -> dict:
 @router.post("/api/config", dependencies=[Depends(require_owner)])
 async def save_config(config: UserConfig) -> dict[str, str]:
     await asyncio.to_thread(State().save_config, config); return {"status": "saved"}
+
+
+class CalendarWritesToggle(BaseModel):
+    enabled: bool = True
+
+
+@router.post("/api/config/calendar-writes", dependencies=[Depends(require_owner)])
+async def set_calendar_writes(body: CalendarWritesToggle) -> dict[str, str]:
+    cfg = await asyncio.to_thread(load_config_dict)
+    cfg["calendar_writes_enabled"] = body.enabled
+    await asyncio.to_thread(save_config_dict, cfg)
+    return {"status": "saved"}
 
 
 @router.post("/api/sync", dependencies=[Depends(require_owner)])
@@ -123,6 +140,11 @@ async def dues_export() -> Response:
 @router.get("/api/coverage", dependencies=[Depends(require_owner)])
 async def coverage() -> dict:
     return await asyncio.to_thread(load_coverage)
+
+
+@router.get("/api/timed-events", dependencies=[Depends(require_owner)])
+async def timed_events(course: str | None = None) -> list[dict]:
+    return await asyncio.to_thread(list_timed_events, course=course)
 
 
 @router.get("/api/calendar-events", dependencies=[Depends(require_owner)])

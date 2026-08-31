@@ -3,14 +3,17 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
+from studyagent.demo_loader import build_demo_registry, demo_mode_enabled
+
 from .calibration import apply_calibration, load_profile, prompt_context
+from .canonical_tasks import canonical_to_donor_tasks
 from .cloud import State
 from .donor.daily_view import build_daily_view
 from .donor.models import Task as DonorTask
 from .donor.onboarding import load_config
 from .donor.syllabus import analyze_all_courses
 from .donor.task_list import write_task_list
-from .donor.taskmaster_calendar import _prepare_tasks, rebuild_calendar_and_brief
+from .donor.taskmaster_calendar import rebuild_calendar_and_brief
 from .google import CalendarWriter
 from .models import ClaimStatus, Task
 from .registry import build_registry
@@ -91,6 +94,8 @@ class TaskmasterService:
             "conflicts": 0,
             "review_required": 0,
             "calendar_writes": False,
+            "timed_events": 0,
+            "data_source": "demo" if demo_mode_enabled() else "live",
         }
         try:
             cfg = load_config()
@@ -98,17 +103,22 @@ class TaskmasterService:
             calendar_writes = user_config.calendar_writes_enabled
             summary["calendar_writes"] = calendar_writes
 
-            syllabus = await asyncio.to_thread(analyze_all_courses)
-            summary["syllabus_courses"] = len(syllabus)
-            run_ref.set({"stage": "syllabus_analyzed", "summary": summary}, merge=True)
+            if demo_mode_enabled():
+                run_ref.set({"stage": "demo_registry_loading", "summary": summary}, merge=True)
+                registry = await asyncio.to_thread(build_demo_registry, cfg, run_id=run_id)
+            else:
+                syllabus = await asyncio.to_thread(analyze_all_courses)
+                summary["syllabus_courses"] = len(syllabus)
+                run_ref.set({"stage": "syllabus_analyzed", "summary": summary}, merge=True)
+                registry = await asyncio.to_thread(build_registry, cfg, run_id=run_id, syllabus_data=syllabus)
 
-            registry = await asyncio.to_thread(build_registry, cfg, run_id=run_id, syllabus_data=syllabus)
             await asyncio.to_thread(
                 save_registry,
                 run_id=run_id,
                 claims=registry["claims"],
                 canonical=registry["canonical"],
                 coverage=registry["coverage"],
+                timed_events=registry.get("timed_events"),
             )
             summary.update(registry["summary"])
             run_ref.set({"stage": "registry_built", "summary": summary}, merge=True)
@@ -132,7 +142,12 @@ class TaskmasterService:
                 return {"run_id": run_id, **summary, "daily": daily, "registry_mode": True}
 
             profile = await asyncio.to_thread(load_profile)
-            kept, skipped = await asyncio.to_thread(_prepare_tasks, cfg)
+            kept, skipped = await asyncio.to_thread(
+                canonical_to_donor_tasks,
+                registry["canonical"],
+                registry["claims"],
+                cfg,
+            )
             semaphore = asyncio.Semaphore(ESTIMATE_CONCURRENCY)
             estimated = await asyncio.gather(*(self._estimate(task, cfg, profile, semaphore) for task in kept))
             summary["estimate_failures"] = sum(item[1] for item in estimated)
@@ -147,6 +162,8 @@ class TaskmasterService:
                 calendar_writer=writer,
                 run_id=run_id,
                 skip_consent=True,
+                canonical=registry["canonical"],
+                timed_events=registry.get("timed_events") or [],
             )
             summary.update(counts)
             run_ref.set({"stage": "calendar_synced", "summary": {**summary, **counts}}, merge=True)

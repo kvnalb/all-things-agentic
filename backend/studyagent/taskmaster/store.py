@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .cloud import State
-from .models import AcademicClaim, CanonicalScheduleItem, RegistrySummary, UserConfig
+from .models import AcademicClaim, CanonicalScheduleItem, RegistrySummary, TimedScheduleItem, UserConfig
 
 
 def load_config_dict() -> dict[str, Any]:
@@ -88,6 +88,7 @@ def save_registry(
     claims: list[AcademicClaim],
     canonical: list[CanonicalScheduleItem],
     coverage: dict[str, Any],
+    timed_events: list[TimedScheduleItem] | None = None,
 ) -> None:
     db = State().db
     batch = db.batch()
@@ -97,6 +98,9 @@ def save_registry(
     for item in canonical:
         ref = db.collection("canonical").document(item.id)
         batch.set(ref, {**item.model_dump(mode="json"), "run_id": run_id, "updated_at": datetime.now(UTC)})
+    for event in timed_events or []:
+        ref = db.collection("timed_events").document(event.id)
+        batch.set(ref, {**event.model_dump(mode="json"), "run_id": run_id, "updated_at": datetime.now(UTC)})
     batch.commit()
     summary = RegistrySummary(
         run_id=run_id,
@@ -121,7 +125,7 @@ def load_registry_summary() -> dict[str, Any]:
     return State().db.collection("artifacts").document("registry").get().to_dict() or {}
 
 
-def list_claims(*, course: str | None = None, limit: int = 500) -> list[dict[str, Any]]:
+def list_claims(*, course: str | None = None, limit: int = 2000) -> list[dict[str, Any]]:
     snaps = State().db.collection("claims").limit(limit).stream()
     rows = [snap.to_dict() for snap in snaps]
     if course:
@@ -137,6 +141,21 @@ def list_canonical(*, status: str | None = None, limit: int = 500) -> list[dict[
     if status:
         rows = [row for row in rows if row.get("status") == status]
     rows.sort(key=lambda row: (row.get("due_at") or "", str(row.get("title", ""))))
+    return rows
+
+
+def list_timed_events(*, course: str | None = None, limit: int = 2000) -> list[dict[str, Any]]:
+    snaps = State().db.collection("timed_events").limit(limit).stream()
+    rows = [snap.to_dict() for snap in snaps if snap.to_dict()]
+    if course:
+        needle = course.casefold()
+        rows = [
+            row
+            for row in rows
+            if needle in str(row.get("course_label", "")).casefold()
+            or needle in str(row.get("course_id", "")).casefold()
+        ]
+    rows.sort(key=lambda row: str(row.get("start_at") or ""))
     return rows
 
 

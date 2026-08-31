@@ -19,7 +19,7 @@ type Calibration = {
 };
 type RegistryRow = Record<string, unknown>;
 type CoverageCourse = Record<string, unknown>;
-type DashboardTab = "schedule" | "claims" | "coverage" | "today";
+type DashboardTab = "schedule" | "claims" | "coverage" | "events" | "today";
 
 const defaults = {
   priority_mode: "grade",
@@ -59,6 +59,7 @@ export default function App() {
   const [schedule, setSchedule] = useState<RegistryRow[]>([]);
   const [claims, setClaims] = useState<RegistryRow[]>([]);
   const [coverage, setCoverage] = useState<{ courses?: CoverageCourse[] }>({});
+  const [timedEvents, setTimedEvents] = useState<RegistryRow[]>([]);
   const [tab, setTab] = useState<DashboardTab>("schedule");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -94,13 +95,14 @@ export default function App() {
       const nextStatus = await api("/api/status");
       setStatus(nextStatus);
       if (nextStatus.canvas_connected) {
-        const [view, runs, cal, scheduleRows, claimRows, coverageRows] = await Promise.all([
+        const [view, runs, cal, scheduleRows, claimRows, coverageRows, timedRows] = await Promise.all([
           api("/api/daily"),
           api("/api/activity"),
           api("/api/calibration"),
           api("/api/schedule"),
           api("/api/claims"),
           api("/api/coverage"),
+          api("/api/timed-events"),
         ]);
         setDaily(view);
         setActivity(runs);
@@ -108,6 +110,7 @@ export default function App() {
         setSchedule(scheduleRows);
         setClaims(claimRows);
         setCoverage(coverageRows);
+        setTimedEvents(timedRows);
         setScreen("dashboard");
       } else setScreen("setup");
     } catch {
@@ -192,6 +195,25 @@ export default function App() {
     }
   }
 
+  async function enableCalendarWrites() {
+    setBusy(true);
+    setMessage("Scheduling work blocks, due markers, and exams…");
+    try {
+      await api("/api/config/calendar-writes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: true }),
+      });
+      await api("/api/sync", { method: "POST" });
+      await refresh();
+      setMessage("Calendar updated with [DUE] markers, exams/quizzes, and work blocks.");
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitFeedback(task: DailyTask, rating: "too_low" | "about_right" | "too_high") {
     const taskKey = String(task.task_key || "");
     if (!taskKey) return;
@@ -227,6 +249,7 @@ export default function App() {
     ["ready", Number(registry.canonical_ready ?? 0)],
     ["conflicts", Number(registry.conflicts ?? 0)],
     ["review", Number(registry.review_required ?? 0)],
+    ["events", Number((registry.coverage as { timed_events_total?: number } | undefined)?.timed_events_total ?? timedEvents.length)],
   ];
   const learnedCourses = calibration ? Object.entries(calibration.by_course).filter(([, value]) => value.samples > 0).length : 0;
 
@@ -345,7 +368,12 @@ export default function App() {
                 </div>
               </div>
               {!status?.calendar_writes_enabled && (
-                <p className="banner-off">Calendar writes are OFF. Review claims and coverage, then enable writes in P2.</p>
+                <div className="banner-off">
+                  <span>Calendar writes are OFF. Review the registry, then schedule to Google Calendar.</span>
+                  <button className="compact" type="button" onClick={enableCalendarWrites} disabled={busy}>
+                    Write to calendar
+                  </button>
+                </div>
               )}
               <div className="metrics">
                 {metrics.map(([key, value]) => (
@@ -368,9 +396,13 @@ export default function App() {
                 )}
               </div>
               <div className="tab-row">
-                {(["schedule", "claims", "coverage", "today"] as DashboardTab[]).map((name) => (
+                {(["schedule", "claims", "coverage", "events", "today"] as DashboardTab[]).map((name) => (
                   <button key={name} type="button" className={`tab-btn ${tab === name ? "active" : ""}`} onClick={() => setTab(name)}>
-                    {name === "schedule" ? "Schedule queue" : name.charAt(0).toUpperCase() + name.slice(1)}
+                    {name === "schedule"
+                      ? "Schedule queue"
+                      : name === "events"
+                        ? "Timed events"
+                        : name.charAt(0).toUpperCase() + name.slice(1)}
                   </button>
                 ))}
               </div>
@@ -456,6 +488,9 @@ export default function App() {
                         <th>Ready</th>
                         <th>Conflicts</th>
                         <th>Review</th>
+                        <th>Needs review</th>
+                        <th>Weights</th>
+                        <th>Timed</th>
                         <th>Notes</th>
                       </tr>
                     </thead>
@@ -468,13 +503,52 @@ export default function App() {
                             <td>{String(row.canonical_ready ?? 0)}</td>
                             <td>{String(row.conflicts ?? 0)}</td>
                             <td>{String(row.review_required ?? 0)}</td>
+                            <td>{String(row.needs_review_assignments ?? 0)}</td>
+                            <td>{row.grade_weights_complete ? "100%" : "incomplete"}</td>
+                            <td>{String(row.timed_events ?? 0)}</td>
                             <td>{((row.notes as string[] | undefined) || []).join("; ") || "—"}</td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={6} className="empty">
+                          <td colSpan={9} className="empty">
                             No coverage data yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {tab === "events" && (
+                <div className="data-table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Course</th>
+                        <th>Title</th>
+                        <th>Kind</th>
+                        <th>Start</th>
+                        <th>End</th>
+                        <th>Optional</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {timedEvents.length ? (
+                        timedEvents.slice(0, 200).map((row) => (
+                          <tr key={String(row.id)}>
+                            <td>{String(row.course_label || "—")}</td>
+                            <td>{String(row.title || "—")}</td>
+                            <td>{String(row.kind || "—")}</td>
+                            <td>{formatDue(row.start_at)}</td>
+                            <td>{formatDue(row.end_at)}</td>
+                            <td>{row.optional ? "yes" : "no"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={6} className="empty">
+                            No timed events loaded yet.
                           </td>
                         </tr>
                       )}

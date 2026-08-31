@@ -31,6 +31,9 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+from studyagent.taskmaster.canonical_tasks import busy_intervals_from_timed_events
+from studyagent.taskmaster.models import TimedScheduleItem
+
 from .canvas_poller import assignments_to_tasks
 from .onboarding import load_config
 from .task_list import write_task_list
@@ -266,13 +269,25 @@ def _advance_to_workable(cursor: dt.datetime, cfg) -> dt.datetime:
     return cursor
 
 
-def _place_blocks(service, cal_id, tasks_sorted, cfg, block_writer=None) -> list[dict]:
+def _overlaps_busy(
+    start: dt.datetime,
+    end: dt.datetime,
+    busy_intervals: list[tuple[dt.datetime, dt.datetime]],
+) -> dt.datetime | None:
+    for busy_start, busy_end in busy_intervals:
+        if start < busy_end and end > busy_start:
+            return busy_end
+    return None
+
+
+def _place_blocks(service, cal_id, tasks_sorted, cfg, block_writer=None, busy_intervals=None) -> list[dict]:
     briefing = []
     lead = dt.timedelta(days=cfg.get("lead_time_days", 5))
     cap = cfg.get("daily_cap_hours", 4)
     start_h = cfg.get("work_day_start", 9)
     end_h = cfg.get("work_day_end", 21)
     per_day: dict = defaultdict(float)
+    busy = busy_intervals or []
 
     now_cursor = dt.datetime.now().astimezone().replace(
         minute=0, second=0, microsecond=0
@@ -313,6 +328,10 @@ def _place_blocks(service, cal_id, tasks_sorted, cfg, block_writer=None) -> list
                 continue
             start = block_cursor
             end = start + dt.timedelta(hours=chunk)
+            busy_end = _overlaps_busy(start, end, busy)
+            if busy_end is not None:
+                block_cursor = busy_end
+                continue
             color_id = _pick_color(task, cfg, due_local)
             if block_writer is not None:
                 block_writer(
@@ -387,6 +406,8 @@ def rebuild_calendar_and_brief(
     calendar_writer=None,
     run_id: str | None = None,
     skip_consent: bool = False,
+    canonical=None,
+    timed_events: list[TimedScheduleItem] | None = None,
 ):
     cfg = load_config()
     if tasks is None:
@@ -419,14 +440,21 @@ def rebuild_calendar_and_brief(
 
     if use_cloud:
         placements: list[dict] = []
+        busy = busy_intervals_from_timed_events(timed_events or [])
         briefing = _place_blocks(
             None,
             None,
             kept,
             cfg,
             block_writer=lambda **kwargs: placements.append(kwargs),
+            busy_intervals=busy,
         )
-        counts = calendar_writer.sync_donor_blocks(placements, run_id)
+        counts = calendar_writer.sync_registry_calendar(
+            placements=placements,
+            canonical=list(canonical or []),
+            timed_events=list(timed_events or []),
+            run_id=run_id,
+        )
         return briefing, skipped, cfg, counts
 
     service = _get_service()

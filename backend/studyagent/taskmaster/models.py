@@ -106,6 +106,23 @@ class CanonicalScheduleItem(BaseModel):
     conflict_details: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class TimedScheduleItem(BaseModel):
+    id: str
+    event_id: str
+    occurrence_id: str
+    course_id: str | None = None
+    course_label: str
+    title: str
+    kind: EventKind = EventKind.OTHER
+    start_at: datetime
+    end_at: datetime | None = None
+    location: str | None = None
+    optional: bool = False
+    is_mine: bool = True
+    status: str = "confirmed"
+    review_required: bool = False
+
+
 class RegistrySummary(BaseModel):
     run_id: str
     claims: int = 0

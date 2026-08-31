@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from .cloud import Secrets, Settings, State
-from .models import StudyBlock, Task
+from .models import CanonicalScheduleItem, ClaimStatus, Task, TimedScheduleItem
 
 
 SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/calendar.app.created", "https://www.googleapis.com/auth/calendar.calendarlist.readonly"]
@@ -60,14 +60,36 @@ class CalendarWriter:
         self.state = State(); self.db = self.state.db
 
     def sync_donor_blocks(self, placements: list[dict], run_id: str) -> dict[str, int]:
-        connection = self.state.connection(); calendar_id = connection.get("calendar_id")
-        if not calendar_id: raise RuntimeError("Google is not connected")
+        return self.sync_registry_calendar(
+            placements=placements,
+            canonical=[],
+            timed_events=[],
+            run_id=run_id,
+        )
+
+    def sync_registry_calendar(
+        self,
+        *,
+        placements: list[dict],
+        canonical: list[CanonicalScheduleItem],
+        timed_events: list[TimedScheduleItem],
+        run_id: str,
+    ) -> dict[str, int]:
+        connection = self.state.connection()
+        calendar_id = connection.get("calendar_id")
+        if not calendar_id:
+            raise RuntimeError("Google is not connected")
         service = build("calendar", "v3", credentials=Google().credentials(), cache_discovery=False)
-        counts = {"created": 0, "updated": 0, "skipped": 0, "deleted": 0}; desired: set[str] = set()
+        counts = {"created": 0, "updated": 0, "skipped": 0, "deleted": 0}
+        desired: set[str] = set()
+
         for placement in placements:
-            task = placement["task"]; task_key = f"{task.source}:{task.source_ref}"
-            key = f"work:{task_key}:{placement['block_index']}"; desired.add(key)
-            start, end = placement["start"], placement["end"]; due_local = task.due_at.astimezone()
+            task = placement["task"]
+            task_key = f"{task.source}:{task.source_ref}"
+            key = f"work:{task_key}:{placement['block_index']}"
+            desired.add(key)
+            start, end = placement["start"], placement["end"]
+            due_local = task.due_at.astimezone()
             days_out = max((due_local - start).total_seconds() / 86400, 0)
             audit = placement.get("audit") or {
                 "event_kind": "study_block",
@@ -90,22 +112,43 @@ class CalendarWriter:
                 "colorId": placement["color_id"],
             }
             counts[self._write(service, calendar_id, key, body, run_id, audit=audit)] += 1
-        connection = self.state.connection(); calendar_id = connection.get("calendar_id")
-        if not calendar_id: raise RuntimeError("Google is not connected")
-        service = build("calendar", "v3", credentials=Google().credentials(), cache_discovery=False); counts = {"created": 0, "updated": 0, "skipped": 0, "deleted": 0}; desired: set[str] = set()
-        for task in tasks:
-            if task.submitted: continue
-            start = task.due_at
-            schedule = ({"start": {"date": start.date().isoformat()}, "end": {"date": (start.date() + timedelta(days=1)).isoformat()}} if task.date_only else {"start": {"dateTime": start.isoformat()}, "end": {"dateTime": (start + timedelta(minutes=15)).isoformat()}})
-            provenance = {"candidate_id": task.candidate_id or task.source_ref}
-            if task.source_revision_id: provenance["source_revision_id"] = task.source_revision_id
-            body = {"summary": f"[DUE] {task.title}", "description": f"Course: {task.course}\nSource: {task.source_url or task.source}\nDue date managed by StudyAgent.", "_private": provenance, **schedule}
-            key = f"deadline:{task.key}"; desired.add(key)
+
+        for item in canonical:
+            if item.status is not ClaimStatus.READY or item.due_at is None:
+                continue
+            key = f"deadline:canonical:{item.id}"
+            desired.add(key)
+            due_local = item.due_at.astimezone()
+            body = {
+                "summary": f"[DUE] {item.title}",
+                "description": (
+                    f"Course: {item.course_label}\n"
+                    f"Source: canonical registry\n"
+                    f"Due date managed by StudyAgent."
+                ),
+                "start": {"dateTime": due_local.isoformat()},
+                "end": {"dateTime": (due_local + timedelta(minutes=15)).isoformat()},
+            }
             counts[self._write(service, calendar_id, key, body, run_id)] += 1
-        for block in blocks:
-            body = {"summary": f"{block.title} ({block.course})", "description": f"Recommended by StudyAgent. Priority {block.priority_score}.\nSource: {block.source_url or block.task_key}", "start": {"dateTime": block.start_at.isoformat()}, "end": {"dateTime": block.end_at.isoformat()}, "colorId": block.color_id}
-            key = f"study:{block.key}"; desired.add(key)
-            counts[self._write(service, calendar_id, key, body, run_id)] += 1
+
+        for event in timed_events:
+            key = f"academic:{event.id}"
+            desired.add(key)
+            start = event.start_at
+            end = event.end_at
+            if end is None:
+                end = start + timedelta(hours=2 if event.kind.value == "exam" else 1)
+            label = "Exam" if event.kind.value == "exam" else "Quiz"
+            location = f"\nLocation: {event.location}" if event.location else ""
+            body = {
+                "summary": f"{label}: {event.title} ({event.course_label})",
+                "description": f"Immovable academic event from StudyAgent registry.{location}",
+                "start": {"dateTime": start.isoformat()},
+                "end": {"dateTime": end.isoformat()},
+                "colorId": "11" if event.kind.value == "exam" else "6",
+            }
+            counts[self._write(service, calendar_id, key, body, run_id, audit={"event_kind": event.kind.value})] += 1
+
         counts["deleted"] = self._delete_stale(service, calendar_id, desired, run_id)
         return counts
 
