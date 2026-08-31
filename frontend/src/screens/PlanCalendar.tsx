@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { courseCode, dayStamp, dueClock, parseWhen, startOfDay, toLocalInput } from "../lib";
+import { courseColor, courseFromEventTitle } from "../scheduleColors";
 import type { CalEvent, RegistryRow } from "../types";
 
 type CalKind = "due" | "exam" | "class" | "work";
@@ -80,7 +81,7 @@ export function PlanCalendar({
           id: String(event.id || `gcal-${index}`),
           googleId: String(event.id || ""),
           title: String(event.title || "Event"),
-          course: "",
+          course: courseFromEventTitle(String(event.title || "")),
           at,
           end: parseWhen(event.end) || undefined,
           kind: classifyEvent("", event.title),
@@ -154,6 +155,7 @@ export function PlanCalendar({
   const monthLabel = cursor.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const selectedDate = parseWhen(selected);
   const canEdit = writesOn;
+  const courseNames = [...new Set(items.map((item) => item.course).filter(Boolean))];
 
   function openDraft(item?: CalItem) {
     if (item?.googleId) {
@@ -181,18 +183,28 @@ export function PlanCalendar({
         </button>
       </div>
       <div className="cal-legend">
-        <span>
-          <i className="cal-dot due" /> Due
-        </span>
-        <span>
-          <i className="cal-dot work" /> Study
-        </span>
-        <span>
-          <i className="cal-dot class" /> Class
-        </span>
-        <span>
-          <i className="cal-dot exam" /> Exam
-        </span>
+        {courseNames.length ? (
+          courseNames.map((name) => (
+            <span key={name}>
+              <i className="cal-dot" style={{ background: courseColor(name) }} /> {name}
+            </span>
+          ))
+        ) : (
+          <>
+            <span>
+              <i className="cal-dot due" /> Due
+            </span>
+            <span>
+              <i className="cal-dot work" /> Study
+            </span>
+            <span>
+              <i className="cal-dot class" /> Class
+            </span>
+            <span>
+              <i className="cal-dot exam" /> Exam
+            </span>
+          </>
+        )}
       </div>
       <div className="cal-grid" role="grid" aria-label={monthLabel}>
         {WEEKDAYS.map((day) => (
@@ -215,6 +227,7 @@ export function PlanCalendar({
                   key={item.id}
                   type="button"
                   className={`cal-chip ${item.kind}`}
+                  style={{ borderLeft: `3px solid ${courseColor(item.course || courseFromEventTitle(item.title))}` }}
                   onClick={() => {
                     setSelected(key);
                     if (item.editable) openDraft(item);
@@ -249,7 +262,7 @@ export function PlanCalendar({
           <div className="day-list">
             {selectedItems.map((item) => (
               <article key={item.id} className="item">
-                <span className={`rail tone-${item.kind === "exam" ? "high" : item.kind === "due" ? "medium" : "low"}`} />
+                <span className="rail" style={{ background: courseColor(item.course || courseFromEventTitle(item.title)) }} />
                 <div>
                   <b>{item.title.replace(/^\[DUE\]\s*/, "")}</b>
                   <small>

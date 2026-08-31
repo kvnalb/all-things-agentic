@@ -7,8 +7,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httplib2
 import httpx
 from google.oauth2.credentials import Credentials
+from google_auth_httplib2 import AuthorizedHttp
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -24,6 +26,7 @@ CALENDAR_MAX_RETRIES = 5
 CALENDAR_BACKOFF_SECONDS = 1.0
 CALENDAR_CALL_PAUSE_SECONDS = 0.05
 CALENDAR_DELETE_LIMIT = 50
+CALENDAR_HTTP_TIMEOUT_SECONDS = 30
 
 
 def _is_rate_limited(exc: HttpError) -> bool:
@@ -39,6 +42,24 @@ def _is_rate_limited(exc: HttpError) -> bool:
     except (AttributeError, json.JSONDecodeError, UnicodeDecodeError):
         pass
     return b"rateLimitExceeded" in (exc.content or b"")
+
+
+def _authorized_calendar_http(credentials: Credentials) -> AuthorizedHttp:
+    return AuthorizedHttp(credentials, http=httplib2.Http(timeout=CALENDAR_HTTP_TIMEOUT_SECONDS))
+
+
+def _manual_event_key(summary: str, start: datetime, end: datetime) -> str:
+    payload = f"{summary}|{start.isoformat()}|{end.isoformat()}"
+    return f"manual:{hashlib.sha256(payload.encode()).hexdigest()[:16]}"
+
+
+def _event_payload(result: dict[str, Any], *, summary: str, start: datetime, end: datetime) -> dict[str, Any]:
+    return {
+        "id": result["id"],
+        "title": result.get("summary") or summary,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+    }
 
 
 def _execute_calendar(request: Callable[[], Any]) -> Any:
@@ -276,11 +297,25 @@ class CalendarWriter:
         calendar_id = self.state.connection().get("calendar_id")
         if not calendar_id:
             raise RuntimeError("Google is not connected")
-        service = build("calendar", "v3", credentials=Google().credentials(), cache_discovery=False)
+        service = build(
+            "calendar",
+            "v3",
+            http=_authorized_calendar_http(Google().credentials()),
+            cache_discovery=False,
+        )
         return service, str(calendar_id)
 
     def create_event(self, *, summary: str, start: datetime, end: datetime) -> dict[str, Any]:
         service, calendar_id = self._client()
+        key = _manual_event_key(summary, start, end)
+        found = _execute_calendar(
+            lambda: service.events()
+            .list(calendarId=calendar_id, privateExtendedProperty=f"studyagent_key={key}", maxResults=1)
+            .execute()
+        )
+        items = found.get("items") or []
+        if items:
+            return _event_payload(items[0], summary=summary, start=start, end=end)
         result = _execute_calendar(
             lambda: service.events()
             .insert(
@@ -290,12 +325,12 @@ class CalendarWriter:
                     "description": "Added from StudyAgent",
                     "start": {"dateTime": start.isoformat()},
                     "end": {"dateTime": end.isoformat()},
-                    "extendedProperties": {"private": {"studyagent_key": f"manual:{hashlib.sha256(summary.encode()).hexdigest()[:12]}"}},
+                    "extendedProperties": {"private": {"studyagent_key": key}},
                 },
             )
             .execute()
         )
-        return {"id": result["id"], "title": result.get("summary") or summary, "start": start.isoformat(), "end": end.isoformat()}
+        return _event_payload(result, summary=summary, start=start, end=end)
 
     def patch_event(self, event_id: str, *, summary: str | None = None, start: datetime | None = None, end: datetime | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {}

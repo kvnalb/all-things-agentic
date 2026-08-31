@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import "./taskmaster.css";
 
 export type UserPreferences = {
   selected_course_ids: string[];
@@ -143,16 +142,14 @@ export default function OnboardingWizard({ api, onComplete, editMode, onCancel }
   }
 
   return (
-    <div className="wrap">
-      <div className="masthead">
-        <p className="eyebrow">{editMode ? "Preferences" : "Taskmaster setup"}</p>
-        <h1 className="today">{editMode ? "Scheduling preferences" : "How should I schedule you?"}</h1>
-        <p className="load">
-          {editMode
-            ? "These settings control work blocks, quiet hours, and priority scoring. Times use Pacific (America/Los_Angeles)."
-            : "A few questions so I never put study blocks in the middle of the night. Times use Pacific (America/Los_Angeles)."}
-        </p>
-      </div>
+    <div className="setup wizard">
+      <p className="eyebrow">{editMode ? "Preferences" : "Taskmaster setup"}</p>
+      <h2>{editMode ? "Scheduling preferences" : "How should I schedule you?"}</h2>
+      <p className="lede">
+        {editMode
+          ? "These settings control work blocks, quiet hours, and priority scoring. Times use Pacific (America/Los_Angeles)."
+          : "A few questions so I never put study blocks in the middle of the night. Times use Pacific (America/Los_Angeles)."}
+      </p>
 
       <div className="setup-progress">
         {Array.from({ length: steps }, (_, i) => (
@@ -325,21 +322,21 @@ export default function OnboardingWizard({ api, onComplete, editMode, onCancel }
 
         <div className="setup-nav">
           {editMode && onCancel && (
-            <button type="button" className="cal-btn setup-back" onClick={onCancel}>
+            <button type="button" className="btn btn-ghost" onClick={onCancel}>
               Cancel
             </button>
           )}
           {!editMode && step > 0 && (
-            <button type="button" className="cal-btn setup-back" onClick={() => setStep((s) => s - 1)}>
+            <button type="button" className="btn btn-ghost" onClick={() => setStep((s) => s - 1)}>
               Back
             </button>
           )}
           {step < lastStep ? (
-            <button type="button" className="cal-btn" onClick={() => setStep((s) => s + 1)}>
+            <button type="button" className="btn btn-primary" onClick={() => setStep((s) => s + 1)}>
               Continue
             </button>
           ) : (
-            <button type="button" className="cal-btn" onClick={() => void save()} disabled={busy}>
+            <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={busy}>
               {busy ? "Saving…" : editMode ? "Save preferences" : "Start scheduling"}
             </button>
           )}

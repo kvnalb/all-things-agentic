@@ -1,4 +1,4 @@
-export type Screen = "boot" | "login" | "setup" | "dashboard";
+export type Screen = "boot" | "login" | "onboarding" | "setup" | "dashboard";
 export type DashboardTab = "today" | "calendar" | "schedule" | "claims" | "coverage" | "events";
 
 export type Course = { id: string; code: string; title: string; role: string };
@@ -9,6 +9,18 @@ export type Status = {
   calendar_writes_enabled?: boolean;
   calendar_id?: string;
   calendar_url?: string;
+  onboarding_complete?: boolean;
+  preferences?: {
+    priority_mode?: string;
+    lead_time_days?: number;
+    work_day_start?: number;
+    work_day_end?: number;
+    off_days?: string[];
+    daily_cap_hours?: number;
+    effort_padding?: number;
+    priority_courses?: string[];
+    excluded_courses?: string[];
+  };
   registry?: Record<string, unknown>;
   last_run?: { state: string; summary?: Record<string, number>; trigger?: string; started_at?: string };
   next_sync_at: string;
@@ -51,5 +63,5 @@ export const configDefaults = {
   daily_cap_hours: 4,
   effort_padding: 1.2,
   calendar_writes_enabled: false,
-  onboarding_complete: true,
+  onboarding_complete: false,
 };

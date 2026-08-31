@@ -288,6 +288,7 @@ class CalendarEventEditsTest(unittest.TestCase):
         writer.state = MagicMock()
         writer.state.connection.return_value = {"calendar_id": "cal-1"}
         service = MagicMock()
+        service.events.return_value.list.return_value.execute.return_value = {"items": []}
         service.events.return_value.insert.return_value.execute.return_value = {
             "id": "evt-1",
             "summary": "Office hours",
@@ -310,6 +311,41 @@ class CalendarEventEditsTest(unittest.TestCase):
         writer.state.connection.return_value = {"calendar_id": "cal-1"}
         with self.assertRaises(ValueError):
             writer.patch_event("evt-1")
+
+    def test_client_passes_http_with_timeout(self) -> None:
+        writer = CalendarWriter.__new__(CalendarWriter)
+        writer.state = MagicMock()
+        writer.state.connection.return_value = {"calendar_id": "cal-1"}
+        with (
+            patch("studyagent.taskmaster.google.Google") as google,
+            patch("studyagent.taskmaster.google.build") as build,
+        ):
+            google.return_value.credentials.return_value = MagicMock()
+            writer._client()
+        http = build.call_args.kwargs.get("http")
+        self.assertIsNotNone(http)
+        inner = getattr(http, "http", http)
+        self.assertTrue(getattr(inner, "timeout", None))
+
+    def test_create_event_reuses_existing_for_same_identity(self) -> None:
+        writer = CalendarWriter.__new__(CalendarWriter)
+        writer.state = MagicMock()
+        writer.state.connection.return_value = {"calendar_id": "cal-1"}
+        service = MagicMock()
+        service.events.return_value.list.return_value.execute.return_value = {
+            "items": [{"id": "evt-1", "summary": "Office hours"}],
+        }
+        start = datetime(2026, 9, 3, 10, tzinfo=UTC)
+        end = datetime(2026, 9, 3, 11, tzinfo=UTC)
+        with (
+            patch("studyagent.taskmaster.google.Google") as google,
+            patch("studyagent.taskmaster.google.build", return_value=service),
+            patch("studyagent.taskmaster.google._execute_calendar", side_effect=lambda fn: fn()),
+        ):
+            google.return_value.credentials.return_value = MagicMock()
+            result = writer.create_event(summary="Office hours", start=start, end=end)
+        self.assertEqual(result["id"], "evt-1")
+        service.events.return_value.insert.assert_not_called()
 
 
 if __name__ == "__main__":

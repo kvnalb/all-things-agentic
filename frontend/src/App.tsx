@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "./lib";
+import OnboardingWizard from "./OnboardingWizard";
 import { Dashboard } from "./screens/Dashboard";
 import { LoginScreen } from "./screens/LoginScreen";
 import { SetupScreen } from "./screens/SetupScreen";
@@ -37,6 +38,7 @@ export default function App() {
   const [syllabus, setSyllabus] = useState<File | null>(null);
   const [syllabusCourse, setSyllabusCourse] = useState("");
   const [actualHours, setActualHours] = useState<Record<string, string>>({});
+  const [showPrefs, setShowPrefs] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -48,7 +50,7 @@ export default function App() {
     setError(isError);
   }
 
-  async function request(path: string, options?: RequestInit) {
+  const request = useCallback(async (path: string, options?: RequestInit) => {
     try {
       return await api(path, options);
     } catch (caught) {
@@ -56,12 +58,19 @@ export default function App() {
       if (failed.status === 401) setScreen("login");
       throw failed;
     }
-  }
+  }, []);
 
   async function refresh(): Promise<Status | null> {
     try {
       const nextStatus = (await request("/api/status")) as Status;
       setStatus(nextStatus);
+      if (nextStatus.preferences?.priority_mode) setPriorityMode(nextStatus.preferences.priority_mode);
+      if (nextStatus.preferences?.lead_time_days != null) setLead(nextStatus.preferences.lead_time_days);
+      if (nextStatus.preferences?.daily_cap_hours != null) setCap(nextStatus.preferences.daily_cap_hours);
+      if (!nextStatus.onboarding_complete) {
+        setScreen("onboarding");
+        return nextStatus;
+      }
       if (!nextStatus.canvas_connected) {
         setScreen("setup");
         return nextStatus;
@@ -107,15 +116,18 @@ export default function App() {
     setBusy(true);
     note("Building your semester plan…");
     try {
+      const current = (await request("/api/config")) as Record<string, unknown>;
       await request("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...configDefaults,
+          ...current,
           selected_course_ids: selected,
           priority_mode: priorityMode,
           lead_time_days: lead,
           daily_cap_hours: cap,
+          onboarding_complete: true,
         }),
       });
       const dataCourse = courses.find((course) => course.code.includes("C187"));
@@ -277,7 +289,26 @@ export default function App() {
             </div>
           )}
           {screen === "login" && <LoginScreen />}
-          {screen === "setup" && (
+          {screen === "onboarding" && (
+            <OnboardingWizard
+              api={request}
+              onComplete={() => {
+                void refresh();
+              }}
+            />
+          )}
+          {showPrefs && (
+            <OnboardingWizard
+              api={request}
+              editMode
+              onComplete={() => {
+                setShowPrefs(false);
+                void refresh();
+              }}
+              onCancel={() => setShowPrefs(false)}
+            />
+          )}
+          {screen === "setup" && !showPrefs && (
             <SetupScreen
               busy={busy}
               courses={courses}
@@ -301,7 +332,7 @@ export default function App() {
               onSave={saveAndSync}
             />
           )}
-          {screen === "dashboard" && (
+          {screen === "dashboard" && !showPrefs && (
             <Dashboard
               busy={busy}
               tab={tab}
@@ -318,6 +349,8 @@ export default function App() {
               onTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
               onSync={syncNow}
               onEnableWrites={enableCalendarWrites}
+              onPrefs={() => setShowPrefs(true)}
+              onAsk={request}
               onActualHours={(taskKey, value) => setActualHours((current) => ({ ...current, [taskKey]: value }))}
               onFeedback={submitFeedback}
               onSaveEvent={saveCalendarEvent}

@@ -16,7 +16,8 @@ Use sanitized names and counts. Start logged in with the dedicated calendar and 
 ## 1:20–2:15 — consequential action
 
 - Open one source-linked `[DUE]` event and its colored study blocks.
-- Show the same task in the daily HIGH/MEDIUM/LOW view with its recommended start date.
+- Show the same task on the **Today** tab (hero card plus course-colored task rails) with its recommended start date.
+- Ask the voice dock a question about today’s work.
 - Point out the separate `StudyAgent — Fall 2026` calendar.
 
 ## 2:15–2:50 — long-running and idempotent

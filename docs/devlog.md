@@ -2,13 +2,21 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-31 — Dashboard merge: keep prefs, colors, voice
+
+- **Before:** PR #22 replaced the student UI. Merging it as-is would drop onboarding work hours/off days, per-course calendar colors, and the voice dock, and retries of in-app calendar creates could duplicate Google events.
+- **Decision:** Fast-forward Mahir’s dashboard onto `main`, then re-wire `OnboardingWizard` (same questions) before course setup, color Dashboard/PlanCalendar with `scheduleColors.ts`, mount the TodayBoard voice dock, and make manual calendar creates look up `studyagent_key` before insert. Calendar HTTP uses a 30s httplib2 timeout; frontend `api()` uses `AbortSignal.timeout`.
+- **After:** Login → scheduling prefs → Canvas setup → dashboard. Preferences remain editable. Course colors match Google Calendar. Voice Q&A sits on the dashboard. Duplicate manual-event retries return the existing event.
+- **Evidence:** `tests/test_calendar_sync.py` CalendarEventEditsTest, `pnpm --dir frontend build`.
+- **Limitation:** `TodayBoard.tsx` / `taskmaster.css` are unused and wait on a follow-up delete. Setup still hardcodes Data 101 / Math 110 source URL matching.
+
 ## 2026-08-30 — StudyAgent dashboard and in-app calendar
 
 - **Before:** Friend's Today board / onboarding wizard sat next to a login loop, a jammed day-count heading (`Sep 3` + `4`), and a month grid of dots with a detail panel stuck on today.
 - **Decision:** Ship a warm-paper StudyAgent UI (light default, terracotta accent) with student stats, boxed tabs, and an in-app month calendar. Calendar edits write to the app-created StudyAgent Google Calendar, not the owner's primary calendar. Session check no longer paints the Google CTA until `/api/status` fails.
 - **After:** Login → setup or dashboard without an OAuth loop. Stats jump to Today / Upcoming / Calendar. Calendar cells show event titles; add/edit/delete persist via `POST|PATCH|DELETE /api/calendar/events`. Status exposes `calendar_url` for Open Calendar.
 - **Evidence:** `tests/test_calendar_link.py`, `tests/test_calendar_sync.py` edit cases, `pnpm --dir frontend build`.
-- **Limitation:** Cloud Run still needs IAM for `mahirtshah13@gmail.com`. Live sync needs Canvas in Secret Manager; demo mode needs a local `demo/data/deadlines.db` that is gitignored.
+- **Limitation:** Cloud Run still needs IAM for the owner Google account. Live sync needs Canvas in Secret Manager; demo mode needs a local `demo/data/deadlines.db` that is gitignored.
 
 ## 2026-08-30 — P1 claims registry (truth before calendar)
 

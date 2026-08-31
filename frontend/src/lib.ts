@@ -1,5 +1,7 @@
+const REQUEST_TIMEOUT_MS = 30_000;
+
 export async function api(path: string, options?: RequestInit): Promise<unknown> {
-  const response = await fetch(path, options);
+  const response = await fetch(path, { ...options, signal: options?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (response.status === 401) {
     const error = new Error("Connect Google to continue") as Error & { status?: number };
     error.status = 401;

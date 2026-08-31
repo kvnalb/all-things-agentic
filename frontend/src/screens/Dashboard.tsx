@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, Moon, RefreshCw, Sun } from "lucide-react";
+import { CalendarDays, Moon, RefreshCw, Settings, Sun } from "lucide-react";
 import { courseCode, dayLabel, dayStamp, dueClock, dueIn, formatDue, groupByDay, humanSync, planStats } from "../lib";
+import { courseColor } from "../scheduleColors";
 import type { CoverageCourse, Daily, DailyTask, DashboardTab, RegistryRow, Status } from "../types";
+import { VoiceDock } from "../VoiceDock";
 import { PlanCalendar } from "./PlanCalendar";
 
 type Theme = "light" | "dark";
@@ -22,6 +24,8 @@ type Props = {
   onTheme: () => void;
   onSync: () => void;
   onEnableWrites: () => void;
+  onPrefs: () => void;
+  onAsk: (path: string, options?: RequestInit) => Promise<unknown>;
   onActualHours: (taskKey: string, value: string) => void;
   onFeedback: (task: DailyTask, rating: "too_low" | "about_right" | "too_high") => void;
   onSaveEvent: (payload: { id?: string; title: string; start: string; end: string }) => void;
@@ -120,6 +124,8 @@ export function Dashboard({
   onTheme,
   onSync,
   onEnableWrites,
+  onPrefs,
+  onAsk,
   onActualHours,
   onFeedback,
   onSaveEvent,
@@ -165,6 +171,9 @@ export function Dashboard({
         <div className="actions">
           <button className="icon-btn" type="button" onClick={onTheme} aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
             {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+          <button className="btn btn-ghost btn-sm" type="button" onClick={onPrefs} disabled={busy}>
+            <Settings size={16} /> Preferences
           </button>
           <button className="btn btn-ghost btn-sm" type="button" onClick={onSync} disabled={busy}>
             <RefreshCw size={16} /> Refresh
@@ -227,7 +236,7 @@ export function Dashboard({
             <div key={row.label} className="load-row">
               <span>{courseCode(row.label)}</span>
               <span className="load-track" aria-hidden="true">
-                <span className="load-bar" style={{ width: `${Math.max(12, (row.count / maxLoad) * 100)}%` }} />
+                <span className="load-bar" style={{ width: `${Math.max(12, (row.count / maxLoad) * 100)}%`, background: courseColor(row.label) }} />
               </span>
               <em>{row.count} this week</em>
             </div>
@@ -265,7 +274,9 @@ export function Dashboard({
           <div className="today">
             <article className="hero">
               <div className="meta-row">
-                <span className="course-chip">{courseCode(lead.course)}</span>
+                <span className="course-chip" style={{ borderColor: courseColor(String(lead.course)), background: courseColor(String(lead.course)) }}>
+                  {courseCode(lead.course)}
+                </span>
                 <span>{dueIn(lead.due_date || lead.due)}</span>
               </div>
               <h3>{String(lead.title)}</h3>
@@ -287,7 +298,7 @@ export function Dashboard({
               <div className="day-list">
                 {rest.map((task, index) => (
                   <article key={String(task.task_key || index)} className="item">
-                    <span className={`rail tone-${String(task.tier || "low").toLowerCase()}`} />
+                    <span className="rail" style={{ background: courseColor(String(task.course)) }} />
                     <div>
                       <b>{String(task.title)}</b>
                       <small>{String(task.course)}</small>
@@ -317,7 +328,7 @@ export function Dashboard({
                 <div className="day-list">
                   {group.items.map((row) => (
                     <article key={String(row.id)} className="item">
-                      <span className={`rail tone-${String(row.status || "ready")}`} />
+                      <span className="rail" style={{ background: courseColor(String(row.course_label || "")) }} />
                       <div>
                         <b>{String(row.title || "")}</b>
                         <small>{String(row.course_label || "")}</small>
@@ -341,7 +352,9 @@ export function Dashboard({
           <div className="cover-grid">
             {(coverage.courses || []).map((row) => (
               <article key={String(row.course_id || row.course_label)} className="cover-card">
-                <span className="course-chip">{courseCode(row.course_label || row.course_id)}</span>
+                <span className="course-chip" style={{ borderColor: courseColor(String(row.course_label || row.course_id)), background: courseColor(String(row.course_label || row.course_id)) }}>
+                  {courseCode(row.course_label || row.course_id)}
+                </span>
                 <b>{String(row.course_label || row.course_id)}</b>
                 <p>
                   {String(row.canonical_ready ?? 0)} due · {String(row.timed_events ?? 0)} class times
@@ -365,7 +378,7 @@ export function Dashboard({
                 <div className="day-list">
                   {group.items.map((row) => (
                     <article key={String(row.id)} className="item">
-                      <span className="rail tone-muted" />
+                      <span className="rail" style={{ background: courseColor(String(row.course_label || "")) }} />
                       <div>
                         <b>{String(row.title || "—")}</b>
                         <small>{String(row.course_label || "Class")}</small>
@@ -383,6 +396,7 @@ export function Dashboard({
         ) : (
           <Empty title="No class times yet" detail="Lectures and exams appear here after a refresh." />
         ))}
+      <VoiceDock api={onAsk} />
     </div>
   );
 }
