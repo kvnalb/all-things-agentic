@@ -4,7 +4,7 @@ Use sanitized names and counts. Start logged in with the dedicated calendar and 
 
 ## 0:00–0:30 — outcome first
 
-- Show six scattered Fall ’26 courses, the StudyAgent calendar, and today’s ranked task view.
+- Show six scattered Fall ’26 courses, the StudyAgent calendar, and the dashboard **Today** tab with the next assignment as a hero card.
 - Say: “StudyAgent manages my semester continuously. It notices course changes, decides what matters, and updates my work plan without a chat prompt.”
 
 ## 0:30–1:20 — real inputs and bounded agent

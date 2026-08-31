@@ -282,5 +282,35 @@ class CalendarRateLimitTest(unittest.TestCase):
         stale_one.reference.delete.assert_not_called()
 
 
+class CalendarEventEditsTest(unittest.TestCase):
+    def test_create_event_inserts_on_app_calendar(self) -> None:
+        writer = CalendarWriter.__new__(CalendarWriter)
+        writer.state = MagicMock()
+        writer.state.connection.return_value = {"calendar_id": "cal-1"}
+        service = MagicMock()
+        service.events.return_value.insert.return_value.execute.return_value = {
+            "id": "evt-1",
+            "summary": "Office hours",
+        }
+        start = datetime(2026, 9, 3, 10, tzinfo=UTC)
+        end = datetime(2026, 9, 3, 11, tzinfo=UTC)
+        with (
+            patch("studyagent.taskmaster.google.Google") as google,
+            patch("studyagent.taskmaster.google.build", return_value=service),
+            patch("studyagent.taskmaster.google._execute_calendar", side_effect=lambda fn: fn()),
+        ):
+            google.return_value.credentials.return_value = MagicMock()
+            result = writer.create_event(summary="Office hours", start=start, end=end)
+        self.assertEqual(result["id"], "evt-1")
+        service.events.return_value.insert.assert_called_once()
+
+    def test_patch_event_requires_a_field(self) -> None:
+        writer = CalendarWriter.__new__(CalendarWriter)
+        writer.state = MagicMock()
+        writer.state.connection.return_value = {"calendar_id": "cal-1"}
+        with self.assertRaises(ValueError):
+            writer.patch_event("evt-1")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -271,3 +271,57 @@ class CalendarWriter:
             synced.update(audit)
         ref.set(synced, merge=True)
         return action
+
+    def _client(self) -> tuple[Any, str]:
+        calendar_id = self.state.connection().get("calendar_id")
+        if not calendar_id:
+            raise RuntimeError("Google is not connected")
+        service = build("calendar", "v3", credentials=Google().credentials(), cache_discovery=False)
+        return service, str(calendar_id)
+
+    def create_event(self, *, summary: str, start: datetime, end: datetime) -> dict[str, Any]:
+        service, calendar_id = self._client()
+        result = _execute_calendar(
+            lambda: service.events()
+            .insert(
+                calendarId=calendar_id,
+                body={
+                    "summary": summary,
+                    "description": "Added from StudyAgent",
+                    "start": {"dateTime": start.isoformat()},
+                    "end": {"dateTime": end.isoformat()},
+                    "extendedProperties": {"private": {"studyagent_key": f"manual:{hashlib.sha256(summary.encode()).hexdigest()[:12]}"}},
+                },
+            )
+            .execute()
+        )
+        return {"id": result["id"], "title": result.get("summary") or summary, "start": start.isoformat(), "end": end.isoformat()}
+
+    def patch_event(self, event_id: str, *, summary: str | None = None, start: datetime | None = None, end: datetime | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if summary is not None:
+            body["summary"] = summary
+        if start is not None:
+            body["start"] = {"dateTime": start.isoformat()}
+        if end is not None:
+            body["end"] = {"dateTime": end.isoformat()}
+        if not body:
+            raise ValueError("no fields to update")
+        service, calendar_id = self._client()
+        result = _execute_calendar(
+            lambda: service.events().patch(calendarId=calendar_id, eventId=event_id, body=body).execute()
+        )
+        return {
+            "id": result["id"],
+            "title": result.get("summary") or summary or "",
+            "start": (result.get("start") or {}).get("dateTime") or (result.get("start") or {}).get("date"),
+            "end": (result.get("end") or {}).get("dateTime") or (result.get("end") or {}).get("date"),
+        }
+
+    def delete_event(self, event_id: str) -> None:
+        service, calendar_id = self._client()
+        try:
+            _execute_calendar(lambda: service.events().delete(calendarId=calendar_id, eventId=event_id).execute())
+        except HttpError as exc:
+            if exc.resp.status != 404:
+                raise

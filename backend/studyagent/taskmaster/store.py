@@ -177,10 +177,10 @@ def list_calendar_audit(*, limit: int = 100) -> list[dict[str, Any]]:
 
 
 def export_schedule_csv() -> str:
-    lines = ["course,title,kind,due_at,status,sources,merge_reason,chosen_claim_id"]
+    lines = ["Course,Assignment,Type,Due,Status,Sources,Calendar"]
     for row in list_canonical(limit=2000):
         due = row.get("due_at") or ""
-        sources = "|".join(row.get("sources") or [])
+        sources = " + ".join(row.get("sources") or [])
         lines.append(
             ",".join(
                 [
@@ -190,8 +190,7 @@ def export_schedule_csv() -> str:
                     _csv_cell(due),
                     _csv_cell(row.get("status")),
                     _csv_cell(sources),
-                    _csv_cell(row.get("merge_reason")),
-                    _csv_cell(row.get("chosen_claim_id")),
+                    _csv_cell("StudyAgent — Fall 2026"),
                 ]
             )
         )

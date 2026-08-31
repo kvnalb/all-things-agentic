@@ -1,7 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "@fontsource-variable/instrument-sans";
+import "@fontsource/ibm-plex-mono/500.css";
 import App from "./App";
-import "./taskmaster.css";
+import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

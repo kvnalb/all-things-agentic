@@ -91,6 +91,18 @@ def _fetch_calendar_events() -> dict[str, Any]:
         if not start:
             continue
         private = ((item.get("extendedProperties") or {}).get("private") or {})
+        events.append(
+            {
+                "id": str(item.get("id") or ""),
+                "title": summary,
+                "start": start,
+                "end": end or start,
+                "description": str(item.get("description") or ""),
+                "color_id": str(item.get("colorId") or private.get("color_id") or ""),
+                "key": private.get("studyagent_key", ""),
+                "editable": True,
+            }
+        )
         if summary.startswith("[DUE]"):
             course = ""
             for line in str(item.get("description") or "").splitlines():
@@ -106,17 +118,6 @@ def _fetch_calendar_events() -> dict[str, Any]:
                 except ValueError:
                     pass
             deadlines.append({"title": summary[5:].strip(), "course": course, "due_label": due_label})
-            continue
-        events.append(
-            {
-                "title": summary,
-                "start": start,
-                "end": end or start,
-                "description": str(item.get("description") or ""),
-                "color_id": str(item.get("colorId") or private.get("color_id") or ""),
-                "key": private.get("studyagent_key", ""),
-            }
-        )
 
     if not deadlines:
         deadlines = _deadlines_from_canonical()
@@ -141,11 +142,13 @@ def _exam_events_for_calendar() -> list[dict[str, Any]]:
         label = "Exam" if kind == "exam" else "Quiz"
         rows.append(
             {
+                "id": "",
                 "title": f"{label}: {item.get('title')} ({item.get('course_label')})",
                 "start": start,
                 "end": end,
                 "description": "Academic event from registry",
                 "color_id": course_color_id(str(item.get("course_label") or "")),
+                "editable": False,
             }
         )
     return rows

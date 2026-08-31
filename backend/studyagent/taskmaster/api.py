@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 from functools import lru_cache
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
@@ -13,7 +16,7 @@ from pydantic import BaseModel, Field
 from .calibration import load_profile, profile_summary, record_feedback
 from .canvas import Canvas
 from .cloud import Settings, State
-from .google import Google
+from .google import CalendarWriter, Google
 from .models import EffortFeedback, UserConfig
 from .daily_board import enrich_daily_view
 from .store import (
@@ -169,6 +172,61 @@ async def timed_events(course: str | None = None) -> list[dict]:
 @router.get("/api/calendar-events", dependencies=[Depends(require_owner)])
 async def calendar_events() -> list[dict]:
     return await asyncio.to_thread(list_calendar_audit)
+
+
+class CalendarEventBody(BaseModel):
+    summary: str = Field(min_length=1, max_length=200)
+    start: str
+    end: str
+
+
+class CalendarEventPatch(BaseModel):
+    summary: str | None = Field(default=None, min_length=1, max_length=200)
+    start: str | None = None
+    end: str | None = None
+
+
+def _event_when(value: str) -> datetime:
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=ZoneInfo("America/Los_Angeles"))
+    return parsed
+
+
+@router.post("/api/calendar/events", dependencies=[Depends(require_owner)])
+async def create_calendar_event(body: CalendarEventBody) -> dict:
+    try:
+        start, end = _event_when(body.start), _event_when(body.end)
+        if end <= start:
+            raise HTTPException(422, "end must be after start")
+        return await asyncio.to_thread(CalendarWriter().create_event, summary=body.summary, start=start, end=end)
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.patch("/api/calendar/events/{event_id}", dependencies=[Depends(require_owner)])
+async def patch_calendar_event(event_id: str, body: CalendarEventPatch) -> dict:
+    try:
+        return await asyncio.to_thread(
+            CalendarWriter().patch_event,
+            event_id,
+            summary=body.summary,
+            start=_event_when(body.start) if body.start else None,
+            end=_event_when(body.end) if body.end else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.delete("/api/calendar/events/{event_id}", dependencies=[Depends(require_owner)])
+async def delete_calendar_event(event_id: str) -> dict[str, str]:
+    try:
+        await asyncio.to_thread(CalendarWriter().delete_event, event_id)
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"status": "deleted"}
 
 
 @router.post("/internal/sync")

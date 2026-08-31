@@ -110,6 +110,7 @@ class CalibrationApiTest(unittest.TestCase):
             calibration_state.return_value.db = db
             response = client.post(
                 "/api/feedback",
+                cookies={"studyagent_session": "owner"},
                 json={
                     "task_key": "canvas:9",
                     "title": "Midterm prep",

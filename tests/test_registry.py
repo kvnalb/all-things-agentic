@@ -94,7 +94,7 @@ class RegistryApiTest(unittest.TestCase):
         from studyagent.taskmaster.store import export_schedule_csv
 
         with patch("studyagent.taskmaster.store.list_canonical", return_value=[]):
-            self.assertTrue(export_schedule_csv().startswith("course,title,kind"))
+            self.assertTrue(export_schedule_csv().startswith("Course,Assignment,Type,Due,Status,Sources,Calendar"))
 
 
 if __name__ == "__main__":

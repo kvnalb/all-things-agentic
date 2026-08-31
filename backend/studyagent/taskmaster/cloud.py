@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 from google.cloud import firestore, secretmanager
 
+from .calendar_link import public_calendar_url
 from .models import Task, UserConfig
 
 
@@ -83,10 +84,13 @@ class State:
         last = runs[0].to_dict() if runs else None
         config = self.config()
         registry = self.db.collection("artifacts").document("registry").get().to_dict() or {}
+        calendar_id = str(self.connection().get("calendar_id") or "")
         return {
             "google_connected": self.db.collection("connections").document("google").get().exists,
             "canvas_connected": bool(config.selected_course_ids),
             "calendar_writes_enabled": config.calendar_writes_enabled,
+            "calendar_id": calendar_id,
+            "calendar_url": public_calendar_url(calendar_id),
             "onboarding_complete": config.onboarding_complete,
             "preferences": {
                 "priority_mode": config.priority_mode,
