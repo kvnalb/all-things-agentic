@@ -25,12 +25,14 @@ import os
 import re
 from collections import defaultdict
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+from studyagent.taskmaster.course_colors import course_color_id
 from studyagent.taskmaster.canonical_tasks import busy_intervals_from_timed_events
 from studyagent.taskmaster.models import TimedScheduleItem
 
@@ -51,6 +53,7 @@ except Exception:  # syllabus analysis is optional
         return []
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
+LA = ZoneInfo("America/Los_Angeles")
 
 _AGENT_ROOT = Path(__file__).resolve().parent.parent
 CREDENTIALS_FILE = os.environ.get("GCAL_CREDENTIALS", str(_AGENT_ROOT / "gcal_credentials.json"))
@@ -78,7 +81,7 @@ def _pick_color(task, cfg, due_local: dt.datetime) -> str:
     """
     if _is_priority_course(task, cfg):
         return COLOR_PRIORITY
-    days_out = (due_local - dt.datetime.now().astimezone()).total_seconds() / 86400
+    days_out = (due_local - dt.datetime.now(LA)).total_seconds() / 86400
     if days_out <= 2:
         return COLOR_CRITICAL
     if days_out <= 5:
@@ -86,6 +89,23 @@ def _pick_color(task, cfg, due_local: dt.datetime) -> str:
     if days_out <= 14:
         return COLOR_UPCOMING
     return COLOR_LATER
+
+
+def color_id_for_entry(entry: dict, cfg: dict | None = None) -> str:
+    """Per-course color id for dashboard rows and Google Calendar blocks."""
+    del cfg
+    return course_color_id(str(entry.get("course") or ""))
+
+
+def _overlaps_placed(
+    start: dt.datetime,
+    end: dt.datetime,
+    placed: list[tuple[dt.datetime, dt.datetime]],
+) -> dt.datetime | None:
+    for placed_start, placed_end in placed:
+        if start < placed_end and end > placed_start:
+            return placed_end
+    return None
 
 
 def _consent_prompt() -> bool:
@@ -251,19 +271,23 @@ def _budget_hours(task, cfg) -> float:
 
 def _advance_to_workable(cursor: dt.datetime, cfg) -> dt.datetime:
     """Move the cursor forward until it lands inside allowed work time."""
+    if cursor.tzinfo is None:
+        cursor = cursor.replace(tzinfo=LA)
+    else:
+        cursor = cursor.astimezone(LA)
     start_h = cfg.get("work_day_start", 9)
     end_h = cfg.get("work_day_end", 21)
     off_days = [d[:3].title() for d in cfg.get("off_days", [])]
 
     for _ in range(24 * 60):
         if cursor.strftime("%a") in off_days:
-            cursor = (cursor + dt.timedelta(days=1)).replace(hour=start_h, minute=0)
+            cursor = (cursor + dt.timedelta(days=1)).replace(hour=start_h, minute=0, second=0, microsecond=0)
             continue
         if cursor.hour < start_h:
-            cursor = cursor.replace(hour=start_h, minute=0)
+            cursor = cursor.replace(hour=start_h, minute=0, second=0, microsecond=0)
             continue
         if cursor.hour >= end_h:
-            cursor = (cursor + dt.timedelta(days=1)).replace(hour=start_h, minute=0)
+            cursor = (cursor + dt.timedelta(days=1)).replace(hour=start_h, minute=0, second=0, microsecond=0)
             continue
         return cursor
     return cursor
@@ -288,41 +312,49 @@ def _place_blocks(service, cal_id, tasks_sorted, cfg, block_writer=None, busy_in
     end_h = cfg.get("work_day_end", 21)
     per_day: dict = defaultdict(float)
     busy = busy_intervals or []
+    placed_intervals: list[tuple[dt.datetime, dt.datetime]] = []
 
-    now_cursor = dt.datetime.now().astimezone().replace(
-        minute=0, second=0, microsecond=0
-    ) + dt.timedelta(hours=1)
+    now_cursor = dt.datetime.now(LA).replace(minute=0, second=0, microsecond=0) + dt.timedelta(hours=1)
+    schedule_cursor = now_cursor
 
     for task in tasks_sorted:
         total = _budget_hours(task, cfg)
         remaining = total
-        due_local = task.due_at.astimezone()
+        due_local = task.due_at.astimezone(LA)
+        task_color = course_color_id(task.course)
 
-        earliest = max(
-            now_cursor,
-            min(due_local - lead, due_local - dt.timedelta(hours=total)),
-        )
-        block_cursor = _advance_to_workable(max(now_cursor, earliest), cfg)
+        earliest = min(due_local - lead, due_local - dt.timedelta(hours=total))
+        block_cursor = _advance_to_workable(max(schedule_cursor, earliest), cfg)
 
         placed = 0
         guard = 0
         while remaining > 0 and guard < 300:
             guard += 1
-            block_cursor = _advance_to_workable(block_cursor, cfg)
+            block_cursor = _advance_to_workable(max(block_cursor, schedule_cursor), cfg)
             if block_cursor >= due_local:
                 break
             day_key = block_cursor.date()
             room_today = cap - per_day[day_key]
             if room_today <= 0:
                 block_cursor = _advance_to_workable(
-                    (block_cursor + dt.timedelta(days=1)).replace(hour=start_h, minute=0),
+                    max(
+                        (block_cursor + dt.timedelta(days=1)).replace(
+                            hour=start_h, minute=0, second=0, microsecond=0
+                        ),
+                        schedule_cursor,
+                    ),
                     cfg,
                 )
                 continue
             chunk = min(remaining, MAX_BLOCK_HOURS, room_today, end_h - block_cursor.hour)
             if chunk <= 0:
                 block_cursor = _advance_to_workable(
-                    (block_cursor + dt.timedelta(days=1)).replace(hour=start_h, minute=0),
+                    max(
+                        (block_cursor + dt.timedelta(days=1)).replace(
+                            hour=start_h, minute=0, second=0, microsecond=0
+                        ),
+                        schedule_cursor,
+                    ),
                     cfg,
                 )
                 continue
@@ -330,9 +362,13 @@ def _place_blocks(service, cal_id, tasks_sorted, cfg, block_writer=None, busy_in
             end = start + dt.timedelta(hours=chunk)
             busy_end = _overlaps_busy(start, end, busy)
             if busy_end is not None:
-                block_cursor = busy_end
+                block_cursor = _advance_to_workable(busy_end, cfg)
                 continue
-            color_id = _pick_color(task, cfg, due_local)
+            placed_end = _overlaps_placed(start, end, placed_intervals)
+            if placed_end is not None:
+                block_cursor = _advance_to_workable(placed_end, cfg)
+                continue
+            color_id = task_color
             if block_writer is not None:
                 block_writer(
                     task=task,
@@ -355,7 +391,9 @@ def _place_blocks(service, cal_id, tasks_sorted, cfg, block_writer=None, busy_in
             per_day[day_key] += chunk
             remaining -= chunk
             placed += 1
-            block_cursor = end
+            placed_intervals.append((start, end))
+            block_cursor = _advance_to_workable(end, cfg)
+            schedule_cursor = block_cursor
 
         briefing.append({
             "task_key": f"{task.source}:{task.source_ref}",
@@ -370,6 +408,7 @@ def _place_blocks(service, cal_id, tasks_sorted, cfg, block_writer=None, busy_in
             "fully_scheduled": remaining <= 0,
             "priority_course": _is_priority_course(task, cfg),
             "from_syllabus": task.source == "syllabus",
+            "color_id": task_color,
         })
     return briefing
 

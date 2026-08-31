@@ -175,7 +175,7 @@ class DonorParityTest(unittest.TestCase):
         writer = CalendarWriter.__new__(CalendarWriter)
         writer.db = db
         service = MagicMock()
-        self.assertEqual(writer._delete_stale(service, "calendar", {"work:current:0"}, "run"), 1)
+        self.assertEqual(writer._delete_stale(service, "calendar", {"work:current:0"}, "run"), (1, 0))
         service.events.return_value.delete.assert_called_once_with(calendarId="calendar", eventId="old-event")
 
     def test_private_api_and_scheduler_require_authentication(self) -> None:

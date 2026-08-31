@@ -8,13 +8,14 @@ from fastapi.responses import RedirectResponse
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .calibration import load_profile, profile_summary, record_feedback
 from .canvas import Canvas
 from .cloud import Settings, State
 from .google import Google
 from .models import EffortFeedback, UserConfig
+from .daily_board import enrich_daily_view
 from .store import (
     export_schedule_csv,
     list_calendar_audit,
@@ -29,13 +30,17 @@ from .store import (
     save_config_dict,
 )
 from .service import TaskmasterService
+from .voice import ask as voice_ask
 
 
 router = APIRouter(tags=["taskmaster"])
 
 
 def require_owner(studyagent_session: str | None = Cookie(default=None)) -> None:
-    if not State().valid_session(studyagent_session): raise HTTPException(401, "owner session required")
+    if not studyagent_session:
+        raise HTTPException(401, "owner session required")
+    if not State().valid_session(studyagent_session):
+        raise HTTPException(401, "owner session required")
 
 
 @router.get("/api/auth/google/start")
@@ -61,6 +66,11 @@ async def status() -> dict:
 async def connect_canvas() -> dict:
     identity, courses = await asyncio.to_thread(Canvas().discover)
     return {"identity_label": identity, "courses": courses}
+
+
+@router.get("/api/config", dependencies=[Depends(require_owner)])
+async def get_config() -> dict:
+    return await asyncio.to_thread(load_config_dict)
 
 
 @router.post("/api/config", dependencies=[Depends(require_owner)])
@@ -92,7 +102,16 @@ async def tasks() -> dict:
 
 @router.get("/api/daily", dependencies=[Depends(require_owner)])
 async def daily() -> dict:
-    return await asyncio.to_thread(load_daily_view)
+    return await asyncio.to_thread(lambda: enrich_daily_view(load_daily_view()))
+
+
+class AskBody(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/api/ask", dependencies=[Depends(require_owner)])
+async def ask_voice(body: AskBody) -> dict:
+    return await asyncio.to_thread(voice_ask, body.question)
 
 
 @router.get("/api/calibration", dependencies=[Depends(require_owner)])

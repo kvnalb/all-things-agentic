@@ -131,6 +131,7 @@ def run_onboarding() -> dict:
         "non_canvas_courses": non_canvas,
         "daily_cap_hours": daily_cap_hours,
         "effort_padding": effort_padding,
+        "onboarding_complete": True,
     }
 
     save_config_dict(config)
@@ -179,6 +180,7 @@ def load_config() -> dict:
         "non_canvas_courses": "",
         "daily_cap_hours": 4,
         "effort_padding": 1.2,
+        "onboarding_complete": False,
     }
 
 

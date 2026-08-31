@@ -44,6 +44,7 @@ class UserConfig(BaseModel):
     daily_cap_hours: float = Field(default=4, ge=0.5, le=24)
     effort_padding: float = Field(default=1.2, ge=1, le=2)
     calendar_writes_enabled: bool = False
+    onboarding_complete: bool = False
 
 
 class ClaimProvenance(StrEnum):

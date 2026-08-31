@@ -8,12 +8,13 @@ from studyagent.demo_loader import build_demo_registry, demo_mode_enabled
 from .calibration import apply_calibration, load_profile, prompt_context
 from .canonical_tasks import canonical_to_donor_tasks
 from .cloud import State
+from .daily_board import enrich_daily_view
 from .donor.daily_view import build_daily_view
 from .donor.models import Task as DonorTask
 from .donor.onboarding import load_config
 from .donor.syllabus import analyze_all_courses
 from .donor.task_list import write_task_list
-from .donor.taskmaster_calendar import rebuild_calendar_and_brief
+from .donor.taskmaster_calendar import color_id_for_entry, rebuild_calendar_and_brief
 from .google import CalendarWriter
 from .models import ClaimStatus, Task
 from .registry import build_registry
@@ -55,8 +56,7 @@ def _briefing_from_canonical(registry: dict) -> list[dict]:
         if item.status != ClaimStatus.READY or item.due_at is None:
             continue
         due_local = item.due_at.astimezone()
-        briefing.append(
-            {
+        row = {
                 "task_key": item.chosen_claim_id or item.id,
                 "title": item.title,
                 "course": item.course_label,
@@ -70,7 +70,7 @@ def _briefing_from_canonical(registry: dict) -> list[dict]:
                 "priority_course": False,
                 "from_syllabus": "syllabus" in "".join(item.sources),
             }
-        )
+        briefing.append({**row, "color_id": color_id_for_entry(row, load_config())})
     return briefing
 
 
@@ -128,6 +128,7 @@ class TaskmasterService:
                 skipped = [f"{row.title} ({row.course_label})" for row in registry["canonical"] if row.status != ClaimStatus.READY]
                 await asyncio.to_thread(write_task_list, briefing, skipped, cfg)
                 daily = await asyncio.to_thread(build_daily_view, briefing, cfg)
+                daily = await asyncio.to_thread(enrich_daily_view, daily)
                 await asyncio.to_thread(save_daily_view, daily)
                 run_ref.set(
                     {
@@ -170,13 +171,18 @@ class TaskmasterService:
 
             await asyncio.to_thread(write_task_list, briefing, skipped, cfg)
             daily = await asyncio.to_thread(build_daily_view, briefing, cfg)
+            daily = await asyncio.to_thread(enrich_daily_view, daily)
             await asyncio.to_thread(save_daily_view, daily)
             await asyncio.to_thread(
                 self.state.save_tasks,
                 [_to_cloud_task(task, raw_estimated_hours=raw_hours.get(f"{task.source}:{task.source_ref}")) for task in tasks],
             )
 
-            state = "partial_success" if summary["estimate_failures"] else "completed"
+            state = (
+                "partial_success"
+                if summary.get("estimate_failures") or summary.get("delete_deferred")
+                else "completed"
+            )
             run_ref.set(
                 {
                     "state": state,

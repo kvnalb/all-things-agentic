@@ -25,6 +25,7 @@ def load_config_dict() -> dict[str, Any]:
         "daily_cap_hours": config.daily_cap_hours,
         "effort_padding": config.effort_padding,
         "calendar_writes_enabled": config.calendar_writes_enabled,
+        "onboarding_complete": config.onboarding_complete,
     }
 
 
@@ -44,6 +45,7 @@ def save_config_dict(value: dict[str, Any]) -> None:
             daily_cap_hours=float(value.get("daily_cap_hours", current.daily_cap_hours)),
             effort_padding=float(value.get("effort_padding", current.effort_padding)),
             calendar_writes_enabled=bool(value.get("calendar_writes_enabled", current.calendar_writes_enabled)),
+            onboarding_complete=bool(value.get("onboarding_complete", current.onboarding_complete)),
         )
     )
 

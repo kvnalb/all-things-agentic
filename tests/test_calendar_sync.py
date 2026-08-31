@@ -1,13 +1,16 @@
 import unittest
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
+
+from googleapiclient.errors import HttpError
 
 from studyagent.taskmaster.canonical_tasks import (
     busy_intervals_from_timed_events,
     canonical_to_donor_tasks,
 )
-from studyagent.taskmaster.donor.taskmaster_calendar import _overlaps_busy
-from studyagent.taskmaster.google import CalendarWriter
+from studyagent.taskmaster.donor.taskmaster_calendar import LA, _advance_to_workable, _overlaps_busy, _place_blocks
+from studyagent.taskmaster.donor.models import Task as DonorTask
+from studyagent.taskmaster.google import CalendarWriter, _execute_calendar, _is_rate_limited
 from studyagent.taskmaster.models import (
     AcademicClaim,
     CanonicalScheduleItem,
@@ -90,12 +93,71 @@ class CanonicalTasksTest(unittest.TestCase):
 
 
 class CalendarPlacementTest(unittest.TestCase):
+    def test_advance_to_workable_moves_early_morning_to_work_window(self) -> None:
+        cursor = datetime(2026, 8, 30, 3, 0, tzinfo=LA)
+        cfg = {"work_day_start": 9, "work_day_end": 21, "off_days": []}
+        result = _advance_to_workable(cursor, cfg)
+        self.assertEqual(result.tzinfo, LA)
+        self.assertEqual(result.hour, 9)
+        self.assertEqual(result.minute, 0)
+
+    def test_advance_to_workable_normalizes_utc_cursor_to_pacific(self) -> None:
+        # 10:00 UTC is 03:00 Pacific in late August — should land at 09:00 Pacific.
+        cursor = datetime(2026, 8, 30, 10, 0, tzinfo=UTC)
+        cfg = {"work_day_start": 9, "work_day_end": 21, "off_days": []}
+        result = _advance_to_workable(cursor, cfg)
+        self.assertEqual(result.hour, 9)
+        self.assertEqual(result.tzinfo, LA)
+
     def test_overlaps_busy_returns_end_of_blocking_interval(self) -> None:
         busy_start = datetime(2026, 9, 8, 14, 0, tzinfo=UTC)
         busy_end = datetime(2026, 9, 8, 16, 0, tzinfo=UTC)
         start = datetime(2026, 9, 8, 13, 0, tzinfo=UTC)
         end = datetime(2026, 9, 8, 15, 0, tzinfo=UTC)
         self.assertEqual(_overlaps_busy(start, end, [(busy_start, busy_end)]), busy_end)
+
+    def test_place_blocks_never_overlap(self) -> None:
+        due = datetime(2026, 9, 15, 17, 0, tzinfo=LA)
+        tasks = [
+            DonorTask(
+                source="canonical",
+                source_ref="a",
+                title="Lab A",
+                course="DATA 144",
+                due_at=due,
+                estimated_hours=4,
+                priority_score=2.0,
+            ),
+            DonorTask(
+                source="canonical",
+                source_ref="b",
+                title="Lab B",
+                course="ECON 136",
+                due_at=due,
+                estimated_hours=4,
+                priority_score=1.5,
+            ),
+        ]
+        placements: list[dict] = []
+        cfg = {
+            "work_day_start": 9,
+            "work_day_end": 21,
+            "off_days": [],
+            "daily_cap_hours": 8,
+            "lead_time_days": 5,
+            "effort_padding": 1.0,
+        }
+        _place_blocks(
+            None,
+            None,
+            tasks,
+            cfg,
+            block_writer=lambda **kwargs: placements.append(kwargs),
+        )
+        ordered = sorted(placements, key=lambda row: row["start"])
+        self.assertGreaterEqual(len(ordered), 2)
+        for left, right in zip(ordered, ordered[1:], strict=False):
+            self.assertLessEqual(left["end"], right["start"])
 
 
 class CalendarWriterRegistrySyncTest(unittest.TestCase):
@@ -111,7 +173,7 @@ class CalendarWriterRegistrySyncTest(unittest.TestCase):
             return "created"
 
         writer._write = fake_write  # type: ignore[method-assign]
-        writer._delete_stale = MagicMock(return_value=0)  # type: ignore[method-assign]
+        writer._delete_stale = MagicMock(return_value=(0, 0))  # type: ignore[method-assign]
 
         due = datetime(2026, 9, 9, 17, 0, tzinfo=UTC)
         task = MagicMock()
@@ -164,6 +226,60 @@ class CalendarWriterRegistrySyncTest(unittest.TestCase):
         self.assertIn("deadline:canonical:ready-1", written_keys)
         self.assertIn("academic:exam-1", written_keys)
         self.assertEqual(counts["created"], 3)
+
+
+class CalendarRateLimitTest(unittest.TestCase):
+    def test_is_rate_limited_detects_403_usage_limits(self) -> None:
+        exc = HttpError(
+            resp=MagicMock(status=403),
+            content=b'{"error":{"errors":[{"reason":"rateLimitExceeded"}]}}',
+        )
+        self.assertTrue(_is_rate_limited(exc))
+
+    def test_execute_calendar_retries_then_succeeds(self) -> None:
+        calls = {"count": 0}
+
+        def request() -> str:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise HttpError(
+                    resp=MagicMock(status=403),
+                    content=b'{"error":{"errors":[{"reason":"rateLimitExceeded"}]}}',
+                )
+            return "ok"
+
+        with patch("studyagent.taskmaster.google.time.sleep"):
+            self.assertEqual(_execute_calendar(request), "ok")
+        self.assertEqual(calls["count"], 2)
+
+    def test_delete_stale_defers_remaining_bindings_after_rate_limit(self) -> None:
+        stale_one = MagicMock()
+        stale_one.to_dict.return_value = {"key": "work:old:0", "google_event_id": "old-event-1"}
+        stale_two = MagicMock()
+        stale_two.to_dict.return_value = {"key": "work:old:1", "google_event_id": "old-event-2"}
+        db = MagicMock()
+        db.collection.return_value.stream.return_value = [stale_one, stale_two]
+        writer = CalendarWriter.__new__(CalendarWriter)
+        writer.db = db
+        service = MagicMock()
+        service.events.return_value.delete.return_value.execute.side_effect = HttpError(
+            resp=MagicMock(status=403),
+            content=b'{"error":{"errors":[{"reason":"rateLimitExceeded"}]}}',
+        )
+
+        with (
+            patch("studyagent.taskmaster.google._execute_calendar", side_effect=lambda fn: fn()),
+            patch("studyagent.taskmaster.google.time.sleep"),
+        ):
+            deleted, deferred = writer._delete_stale(service, "calendar", set(), "run")
+
+        self.assertEqual(deleted, 0)
+        self.assertEqual(deferred, 2)
+        stale_one.reference.set.assert_called_with(
+            {"state": "delete_deferred", "run_id": "run", "attempted_at": ANY},
+            merge=True,
+        )
+        stale_one.reference.delete.assert_not_called()
 
 
 if __name__ == "__main__":

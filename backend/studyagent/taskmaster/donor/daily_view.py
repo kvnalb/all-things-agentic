@@ -26,6 +26,8 @@ import json
 
 from studyagent.taskmaster.store import save_daily_view
 
+from .taskmaster_calendar import color_id_for_entry
+
 # ANSI colors for the terminal view
 RED = "\033[91m"
 YELLOW = "\033[93m"
@@ -108,12 +110,14 @@ def build_daily_view(briefing: list[dict], cfg: dict, tasks_raw=None, now: dt.da
             "from_syllabus": b.get("from_syllabus", False),
             "priority_course": b.get("priority_course", False),
             "overdue_start": start.date() < today,
+            "color_id": b.get("color_id") or color_id_for_entry(b, cfg),
         }
 
         if start.date() <= today:
             active.append(entry)
         else:
             entry["opens_in_days"] = (start.date() - today).days
+            entry["color_id"] = b.get("color_id") or color_id_for_entry(b, cfg)
             upcoming.append(entry)
 
     scores = [a["score"] for a in active]

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import httpx
 from google.oauth2.credentials import Credentials
@@ -11,11 +14,44 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from .cloud import Secrets, Settings, State
+from .course_colors import course_color_id
 from .models import CanonicalScheduleItem, ClaimStatus, Task, TimedScheduleItem
 
 
 SCOPES = ["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile", "https://www.googleapis.com/auth/calendar.app.created", "https://www.googleapis.com/auth/calendar.calendarlist.readonly"]
 CALENDAR_MARKER = "studyagent-fall-2026-v1"
+CALENDAR_MAX_RETRIES = 5
+CALENDAR_BACKOFF_SECONDS = 1.0
+CALENDAR_CALL_PAUSE_SECONDS = 0.05
+CALENDAR_DELETE_LIMIT = 50
+
+
+def _is_rate_limited(exc: HttpError) -> bool:
+    if exc.resp.status == 429:
+        return True
+    if exc.resp.status != 403:
+        return False
+    try:
+        payload = json.loads(exc.content.decode())
+        for item in payload.get("error", {}).get("errors", []):
+            if item.get("reason") == "rateLimitExceeded":
+                return True
+    except (AttributeError, json.JSONDecodeError, UnicodeDecodeError):
+        pass
+    return b"rateLimitExceeded" in (exc.content or b"")
+
+
+def _execute_calendar(request: Callable[[], Any]) -> Any:
+    delay = CALENDAR_BACKOFF_SECONDS
+    for attempt in range(CALENDAR_MAX_RETRIES):
+        try:
+            return request()
+        except HttpError as exc:
+            if not _is_rate_limited(exc) or attempt == CALENDAR_MAX_RETRIES - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
+    raise RuntimeError("calendar request retry loop exhausted")
 
 
 class Google:
@@ -80,7 +116,7 @@ class CalendarWriter:
         if not calendar_id:
             raise RuntimeError("Google is not connected")
         service = build("calendar", "v3", credentials=Google().credentials(), cache_discovery=False)
-        counts = {"created": 0, "updated": 0, "skipped": 0, "deleted": 0}
+        counts = {"created": 0, "updated": 0, "skipped": 0, "deleted": 0, "delete_deferred": 0}
         desired: set[str] = set()
 
         for placement in placements:
@@ -145,31 +181,61 @@ class CalendarWriter:
                 "description": f"Immovable academic event from StudyAgent registry.{location}",
                 "start": {"dateTime": start.isoformat()},
                 "end": {"dateTime": end.isoformat()},
-                "colorId": "11" if event.kind.value == "exam" else "6",
+                "colorId": course_color_id(event.course_label),
             }
             counts[self._write(service, calendar_id, key, body, run_id, audit={"event_kind": event.kind.value})] += 1
 
-        counts["deleted"] = self._delete_stale(service, calendar_id, desired, run_id)
+        deleted, deferred = self._delete_stale(service, calendar_id, desired, run_id)
+        counts["deleted"] = deleted
+        counts["delete_deferred"] = deferred
         return counts
 
-    def _delete_stale(self, service, calendar_id: str, desired: set[str], run_id: str) -> int:
-        deleted = 0
+    def _delete_stale(self, service, calendar_id: str, desired: set[str], run_id: str) -> tuple[int, int]:
+        stale = []
         for snapshot in self.db.collection("calendar_bindings").stream():
-            binding = snapshot.to_dict() or {}; key = binding.get("key")
-            if not key or key in desired: continue
+            binding = snapshot.to_dict() or {}
+            key = binding.get("key")
+            if not key or key in desired:
+                continue
+            stale.append((snapshot, binding))
+
+        deleted = 0
+        deferred = 0
+        for index, (snapshot, binding) in enumerate(stale):
+            if deleted >= CALENDAR_DELETE_LIMIT:
+                deferred = len(stale) - index
+                break
             snapshot.reference.set({"state": "deleting", "run_id": run_id, "attempted_at": datetime.now(UTC)}, merge=True)
             try:
-                service.events().delete(calendarId=calendar_id, eventId=binding["google_event_id"]).execute()
+                _execute_calendar(
+                    lambda event_id=binding["google_event_id"]: service.events()
+                    .delete(calendarId=calendar_id, eventId=event_id)
+                    .execute()
+                )
             except HttpError as exc:
-                if exc.resp.status != 404: raise
-            snapshot.reference.delete(); deleted += 1
-        return deleted
+                if exc.resp.status == 404:
+                    pass
+                elif _is_rate_limited(exc):
+                    snapshot.reference.set(
+                        {"state": "delete_deferred", "run_id": run_id, "attempted_at": datetime.now(UTC)},
+                        merge=True,
+                    )
+                    deferred = len(stale) - index
+                    break
+                else:
+                    raise
+            snapshot.reference.delete()
+            deleted += 1
+            time.sleep(CALENDAR_CALL_PAUSE_SECONDS)
+        return deleted, deferred
 
     def _write(self, service, calendar_id: str, key: str, body: dict, run_id: str, *, audit: dict | None = None) -> str:
         digest = hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest(); doc_id = hashlib.sha256(key.encode()).hexdigest()[:24]
         ref = self.db.collection("calendar_bindings").document(doc_id); binding = ref.get().to_dict() or {}
         if binding.get("desired_hash") == digest: return "skipped"
         private = {"studyagent_key": key, "run_id": run_id}
+        if body.get("colorId"):
+            private["color_id"] = str(body["colorId"])
         if key.startswith("deadline:"):
             # The deadline body is built from a Task, whose provenance is added
             # by sync() before calling this helper.
@@ -180,9 +246,18 @@ class CalendarWriter:
             payload.update(audit)
         ref.set(payload, merge=True)
         if binding.get("google_event_id"):
-            result = service.events().patch(calendarId=calendar_id, eventId=binding["google_event_id"], body=body).execute(); action = "updated"
+            result = _execute_calendar(
+                lambda: service.events()
+                .patch(calendarId=calendar_id, eventId=binding["google_event_id"], body=body)
+                .execute()
+            )
+            action = "updated"
         else:
-            result = service.events().insert(calendarId=calendar_id, body=body).execute(); action = "created"
+            result = _execute_calendar(
+                lambda: service.events().insert(calendarId=calendar_id, body=body).execute()
+            )
+            action = "created"
+        time.sleep(CALENDAR_CALL_PAUSE_SECONDS)
         synced = {
             "key": key,
             "google_event_id": result["id"],
