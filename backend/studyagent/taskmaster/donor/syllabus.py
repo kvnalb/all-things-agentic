@@ -34,7 +34,7 @@ from .canvas_poller import _get, fetch_active_courses, CANVAS_BASE_URL, _headers
 from .onboarding import load_config
 
 # Gemini via the same key the agent already uses.
-GEMINI_MODEL = os.environ.get("SYLLABUS_MODEL", "gemini-flash-latest")
+GEMINI_MODEL = os.environ.get("SYLLABUS_MODEL", "gemini-3.7-flash")
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +178,7 @@ def analyze_with_gemini(text: str) -> dict:
             )
             payload = {
                 "contents": [{"parts": [{"text": ANALYSIS_PROMPT + text}]}],
-                "generationConfig": {"temperature": 0.2},
+                "generationConfig": {"thinkingConfig": {"thinkingLevel": "LOW"}},
             }
             resp = requests.post(url, json=payload, timeout=120)
             resp.raise_for_status()
@@ -194,7 +194,7 @@ def analyze_with_gemini(text: str) -> dict:
             response = client.models.generate_content(
                 model=GEMINI_MODEL,
                 contents=ANALYSIS_PROMPT + text,
-                config={"temperature": 0.2},
+                config={"thinking_config": {"thinking_level": "LOW"}},
             )
             raw = response.text or ""
         raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```")

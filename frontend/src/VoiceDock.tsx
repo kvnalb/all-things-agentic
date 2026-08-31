@@ -29,6 +29,57 @@ const STATE_LABEL: Record<"idle" | "listening" | "thinking", string> = {
   thinking: "Thinking",
 };
 
+const SPEECH_CHUNK_CHARS = 280;
+
+function chunkSpeechText(text: string): string[] {
+  const normalized = text.trim().replace(/\s+/g, " ");
+  if (!normalized) return [];
+  if (normalized.length <= SPEECH_CHUNK_CHARS) return [normalized];
+
+  const sentences = normalized.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [normalized];
+  const chunks: string[] = [];
+  let current = "";
+
+  const pushCurrent = () => {
+    const trimmed = current.trim();
+    if (trimmed) chunks.push(trimmed);
+    current = "";
+  };
+
+  const pushWords = (value: string) => {
+    let wordChunk = "";
+    for (const word of value.split(" ")) {
+      const next = wordChunk ? `${wordChunk} ${word}` : word;
+      if (next.length > SPEECH_CHUNK_CHARS) {
+        if (wordChunk) chunks.push(wordChunk);
+        wordChunk = word;
+      } else {
+        wordChunk = next;
+      }
+    }
+    if (wordChunk) current = wordChunk;
+  };
+
+  for (const sentence of sentences) {
+    const part = sentence.trim();
+    if (!part) continue;
+    if (part.length > SPEECH_CHUNK_CHARS) {
+      pushCurrent();
+      pushWords(part);
+      continue;
+    }
+    const combined = current ? `${current} ${part}` : part;
+    if (combined.length > SPEECH_CHUNK_CHARS) {
+      pushCurrent();
+      current = part;
+    } else {
+      current = combined;
+    }
+  }
+  pushCurrent();
+  return chunks.length ? chunks : [normalized];
+}
+
 export function VoiceDock({ api }: { api: (path: string, options?: RequestInit) => Promise<unknown> }) {
   const [state, setState] = useState<"idle" | "listening" | "thinking">("idle");
   const [heard, setHeard] = useState("");
@@ -68,11 +119,26 @@ export function VoiceDock({ api }: { api: (path: string, options?: RequestInit) 
 
   const speak = (text: string) => {
     try {
+      const chunks = chunkSpeechText(text);
+      if (!chunks.length) return;
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
       const voice = pickVoice();
-      if (voice) utterance.voice = voice;
-      window.speechSynthesis.speak(utterance);
+      let index = 0;
+
+      const speakNext = () => {
+        if (index >= chunks.length) return;
+        const utterance = new SpeechSynthesisUtterance(chunks[index]);
+        if (voice) utterance.voice = voice;
+        const advance = () => {
+          index += 1;
+          window.setTimeout(speakNext, 40);
+        };
+        utterance.onend = advance;
+        utterance.onerror = advance;
+        window.speechSynthesis.speak(utterance);
+      };
+
+      speakNext();
     } catch {
       /* text still visible */
     }

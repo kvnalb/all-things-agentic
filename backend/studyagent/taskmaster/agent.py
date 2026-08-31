@@ -30,7 +30,7 @@ def parse_task_event(node_input: str, ctx: Context) -> Event:
     return Event(output=task)
 
 
-effort_agent = Agent(name="effort_agent", model=os.environ.get("STUDYAGENT_GEMINI_MODEL", "gemini-3.5-flash"), mode="single_turn", instruction=EFFORT_ESTIMATOR_INSTRUCTION)
+effort_agent = Agent(name="effort_agent", model=os.environ.get("STUDYAGENT_GEMINI_MODEL", "gemini-3.7-flash"), mode="single_turn", instruction=EFFORT_ESTIMATOR_INSTRUCTION)
 
 
 def apply_effort_estimate(node_input: object, ctx: Context) -> Event:

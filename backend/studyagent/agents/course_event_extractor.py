@@ -23,7 +23,7 @@ class ModelRunError(RuntimeError):
 class AdkGeminiModel:
     def __init__(self, *, output_schema: type, model: str | None = None) -> None:
         self.model_name = model or os.environ.get(
-            "STUDYAGENT_GEMINI_MODEL", "gemini-3.5-flash"
+            "STUDYAGENT_GEMINI_MODEL", "gemini-3.7-flash"
         )
         self.agent = LlmAgent(
             name="course_event_extractor",
@@ -34,7 +34,11 @@ class AdkGeminiModel:
             output_schema=output_schema,
             include_contents="none",
             generate_content_config=types.GenerateContentConfig(
-                temperature=0,
+                # Gemini 3+ calibrates its reasoning layers around default sampling
+                # values, so bound cost with thinking_level instead of temperature.
+                thinking_config=types.ThinkingConfig(
+                    thinking_level=types.ThinkingLevel.LOW
+                ),
                 max_output_tokens=8192,
             ),
         )

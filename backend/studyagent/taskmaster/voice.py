@@ -21,11 +21,82 @@ RULES — these matter more than being helpful:
 - Never guess at grades, times you don't have, or what a professor wants.
 
 STYLE — this is being spoken aloud, not read:
-- Two or three sentences. Never lists, never markdown, never bullet points.
+- A few short sentences. Never lists, never markdown, never bullet points.
+- If several items matter, name the top ones in one flowing sentence instead of
+  trailing off.
+- Always finish your last sentence; never stop mid-thought.
 - Say dates like a person: "next Thursday", "the 24th", not "2026-09-24".
 - Say durations naturally: "about half an hour", not "~25m est".
 - Be direct and warm. No preamble like "Based on your data".
 """
+
+VOICE_MAX_OUTPUT_TOKENS = 1024
+DEFAULT_VOICE_MODEL = "gemini-omni-1.1-flash-preview"
+
+
+def _voice_model() -> str:
+    return os.environ.get("STUDYAGENT_VOICE_MODEL", DEFAULT_VOICE_MODEL)
+
+
+def _is_omni_model(model: str) -> bool:
+    return "omni" in model.lower()
+
+
+def _response_text(response) -> str:
+    text = (getattr(response, "text", None) or "").strip()
+    if text:
+        return text
+    chunks: list[str] = []
+    for candidate in getattr(response, "candidates", None) or []:
+        content = getattr(candidate, "content", None)
+        for part in getattr(content, "parts", None) or []:
+            part_text = getattr(part, "text", None)
+            if part_text:
+                chunks.append(part_text)
+    return "".join(chunks).strip()
+
+
+def _interaction_text(interaction) -> str:
+    output_text = getattr(interaction, "output_text", None)
+    if output_text:
+        return str(output_text).strip()
+    outputs = getattr(interaction, "outputs", None) or []
+    for output in reversed(outputs):
+        text = getattr(output, "text", None)
+        if text:
+            return str(text).strip()
+    for step in reversed(getattr(interaction, "steps", None) or []):
+        if getattr(step, "type", None) != "model_output":
+            continue
+        for content in getattr(step, "content", None) or []:
+            text = getattr(content, "text", None)
+            if text:
+                return str(text).strip()
+    return ""
+
+
+def _generate_voice_answer(client, model: str, prompt: str) -> str:
+    if _is_omni_model(model):
+        interaction = client.interactions.create(
+            model=model,
+            input=prompt,
+            response_modalities=["text"],
+            generation_config={
+                "temperature": 0.3,
+                "max_output_tokens": VOICE_MAX_OUTPUT_TOKENS,
+                "thinking_level": "low",
+            },
+        )
+        return _interaction_text(interaction)
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config={
+            "max_output_tokens": VOICE_MAX_OUTPUT_TOKENS,
+            "thinking_config": {"thinking_level": "LOW"},
+        },
+    )
+    return _response_text(response)
 
 
 def _trim_context(view: dict) -> dict:
@@ -92,10 +163,10 @@ def ask(question: str) -> dict:
         + json.dumps(ctx, indent=2, default=str)
         + "\n\nSPOKEN QUESTION: "
         + question
-        + "\n\nAnswer out loud in two or three sentences:"
+        + "\n\nAnswer out loud in a few complete sentences:"
     )
 
-    model = os.environ.get("STUDYAGENT_GEMINI_MODEL", "gemini-2.5-flash")
+    model = _voice_model()
     try:
         from google import genai
 
@@ -104,12 +175,7 @@ def ask(question: str) -> dict:
             project=Settings.project,
             location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
         )
-        response = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config={"temperature": 0.3, "max_output_tokens": 400},
-        )
-        text = (response.text or "").strip()
+        text = _generate_voice_answer(client, model, prompt)
     except Exception as exc:
         return {
             "answer": f"I couldn't work that out just now. {str(exc)[:60]}",
