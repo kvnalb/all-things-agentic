@@ -14,7 +14,7 @@ person or coding agent never needs to see their values.
 - One bCourses personal access token, used only for read-only Canvas API calls.
 - One disposable Google Cloud project with billing enabled.
 - Vertex AI, Firestore, Cloud Storage, Secret Manager, Calendar, Cloud Run,
-  Artifact Registry, and Cloud Build APIs.
+  Cloud Scheduler, Artifact Registry, and Cloud Build APIs.
 - One private source bucket and a Firestore Native database.
 - Three Secret Manager secrets:
   - `studyagent-canvas-token`
@@ -67,16 +67,6 @@ printf '%s' "$STUDYAGENT_CANVAS_TOKEN" | gcloud secrets versions add studyagent-
   --data-file=-
 unset STUDYAGENT_CANVAS_TOKEN
 ```
-
-For a one-off local test before Secret Manager wiring lands, enter the token
-only into the current terminal:
-
-```sh
-read -s CANVAS_TOKEN
-export CANVAS_TOKEN
-```
-
-Close that terminal when finished. Never commit or echo the value.
 
 ## 2. Install and authenticate the Google Cloud CLI
 
@@ -131,6 +121,7 @@ gcloud services enable \
   artifactregistry.googleapis.com \
   calendar-json.googleapis.com \
   cloudbuild.googleapis.com \
+  cloudscheduler.googleapis.com \
   firestore.googleapis.com \
   iam.googleapis.com \
   run.googleapis.com \
@@ -149,6 +140,7 @@ Why each service exists:
 | Secret Manager | Canvas token, OAuth client configuration, and Google refresh token |
 | Calendar API | create and update the dedicated StudyAgent calendar |
 | Cloud Run | deployed backend and compiled setup wizard |
+| Cloud Scheduler | hourly OIDC-authenticated semester sync |
 | Artifact Registry / Cloud Build | build and store the Cloud Run container |
 
 No Gmail API is required.
@@ -369,7 +361,63 @@ STUDYAGENT_SOURCE_BUCKET=your-private-source-bucket
 Do not commit a populated `.env`. Export values in the current terminal or use
 Cloud Run's non-secret environment-variable configuration.
 
-## 10. Verify readiness without exposing secrets
+## 10. Deploy the owner-protected service
+
+The app serves the React UI and FastAPI API from one container. Set the final
+Cloud Run URL as `STUDYAGENT_BASE_URL`; it must exactly match the OAuth callback
+host configured in Google Auth Platform.
+
+```sh
+gcloud run deploy studyagent \
+  --source=. \
+  --region="$STUDYAGENT_REGION" \
+  --service-account="$STUDYAGENT_RUNTIME_SA" \
+  --allow-unauthenticated \
+  --min=0 \
+  --set-env-vars="STUDYAGENT_ENV=production,STUDYAGENT_ALLOWED_EMAIL=your-personal-google-email,GOOGLE_CLOUD_PROJECT=$STUDYAGENT_PROJECT_ID,GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=true,STUDYAGENT_GEMINI_MODEL=gemini-3.5-flash,STUDYAGENT_SOURCE_BUCKET=$STUDYAGENT_SOURCE_BUCKET,CANVAS_BASE_URL=https://bcourses.berkeley.edu"
+```
+
+Get the stable service URL, add its exact callback to the OAuth client, and
+then redeploy with the base URL:
+
+```sh
+export STUDYAGENT_BASE_URL="$(gcloud run services describe studyagent --region="$STUDYAGENT_REGION" --format='value(status.url)')"
+gcloud run services update studyagent \
+  --region="$STUDYAGENT_REGION" \
+  --update-env-vars="STUDYAGENT_BASE_URL=$STUDYAGENT_BASE_URL"
+```
+
+Only the landing page and OAuth endpoints are anonymous. The private API uses
+the secure owner-session cookie created by the OAuth callback. Open
+`$STUDYAGENT_BASE_URL`, select **Connect Google**, and authorize the configured
+owner account.
+
+## 11. Create the hourly scheduler
+
+```sh
+gcloud iam service-accounts create studyagent-scheduler \
+  --display-name="StudyAgent hourly scheduler"
+
+export STUDYAGENT_SCHEDULER_SA="studyagent-scheduler@${STUDYAGENT_PROJECT_ID}.iam.gserviceaccount.com"
+
+gcloud scheduler jobs create http studyagent-hourly-sync \
+  --location="$STUDYAGENT_REGION" \
+  --schedule="0 * * * *" \
+  --uri="$STUDYAGENT_BASE_URL/internal/sync" \
+  --http-method=POST \
+  --oidc-service-account-email="$STUDYAGENT_SCHEDULER_SA" \
+  --oidc-token-audience="$STUDYAGENT_BASE_URL/internal/sync" \
+  --paused
+```
+
+Leave it paused until one manual sync succeeds. Then enable it:
+
+```sh
+gcloud scheduler jobs resume studyagent-hourly-sync \
+  --location="$STUDYAGENT_REGION"
+```
+
+## 12. Verify readiness without exposing secrets
 
 Run these checks:
 
@@ -378,7 +426,7 @@ gcloud auth list
 gcloud config get-value project
 gcloud auth application-default print-access-token >/dev/null
 gcloud services list --enabled \
-  --filter='name:(aiplatform.googleapis.com calendar-json.googleapis.com firestore.googleapis.com run.googleapis.com secretmanager.googleapis.com storage.googleapis.com)'
+  --filter='name:(aiplatform.googleapis.com calendar-json.googleapis.com cloudscheduler.googleapis.com firestore.googleapis.com run.googleapis.com secretmanager.googleapis.com storage.googleapis.com)'
 gcloud firestore databases describe --database="(default)"
 gcloud storage buckets describe "gs://$STUDYAGENT_SOURCE_BUCKET"
 gcloud secrets describe studyagent-canvas-token
@@ -392,9 +440,9 @@ Then confirm in Google Auth Platform:
 - your exact email is a test user;
 - the five scopes above are the only requested scopes;
 - the localhost callback matches exactly;
+- the deployed Cloud Run callback matches exactly;
 - the downloaded OAuth JSON is no longer in the repository or Downloads.
 
-At this point the machine and project are ready. Do not send the resulting
-tokens to anyone. The next application step is to read them through Secret
-Manager, connect your allowed Google account, and run one real Canvas assignment
-through the ADK workflow before adding further infrastructure.
+At this point, open the hosted wizard, connect Google, discover Canvas courses,
+attach course sites or a syllabus, and run the first sync. Run it again without
+changing the inputs: the second run must create zero duplicate Calendar events.

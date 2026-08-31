@@ -4,7 +4,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import AnyHttpUrl, BaseModel, Field, model_validator
+from pydantic import AnyHttpUrl, BaseModel, Field, computed_field, model_validator
 
 
 class ProviderName(StrEnum):
@@ -37,6 +37,65 @@ class ConnectorResult(BaseModel):
     message: str | None = None
 
 
+class ExtractionMethod(StrEnum):
+    API_FIELD = "api_field"
+    ICS_FIELD = "ics_field"
+    HTML_TABLE = "html_table"
+    PROSE = "prose"
+    PATTERN_INFERENCE = "pattern_inference"
+    USER_ASSERTED = "user_asserted"
+
+
+Confidence = Annotated[float, Field(ge=0, le=1)]
+
+
+class Evidence(BaseModel):
+    field: str = Field(min_length=1, max_length=64)
+    source_id: str
+    source_revision_id: str
+    method: ExtractionMethod
+    confidence: Confidence
+    excerpt: str = Field(min_length=1, max_length=500)
+    excerpt_start: int | None = Field(default=None, ge=0)
+    excerpt_end: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_offsets(self) -> Evidence:
+        if (self.excerpt_start is None) != (self.excerpt_end is None):
+            raise ValueError("evidence offsets must be supplied together")
+        if self.excerpt_start is not None and self.excerpt_end <= self.excerpt_start:
+            raise ValueError("evidence end must follow evidence start")
+        return self
+
+
+class DatePrecision(StrEnum):
+    EXACT = "exact"
+    DATE_ONLY = "date_only"
+    WEEK_ONLY = "week_only"
+    UNKNOWN = "unknown"
+
+
+class CandidateStatus(StrEnum):
+    PUBLISHED = "published"
+    PROJECTED = "projected"
+    WITHDRAWN = "withdrawn"
+
+
+class GradeComponent(BaseModel):
+    id: str
+    course_id: str
+    name: str = Field(min_length=1, max_length=120)
+    weight_pct: float = Field(ge=0, le=100)
+    item_count: int | None = Field(default=None, ge=0)
+    drop_lowest: int | None = Field(default=None, ge=0)
+    evidence: list[Evidence] = Field(min_length=1)
+
+
+def weights_complete(components: list[GradeComponent], tolerance: float = 0.01) -> bool:
+    """True when a course's weights sum to 100. A shortfall means a component was missed."""
+    return abs(sum(component.weight_pct for component in components) - 100.0) <= tolerance
+
+
 class Course(BaseModel):
     id: str
     code: str
@@ -45,6 +104,14 @@ class Course(BaseModel):
     canvas_id: str | None = None
     ed_id: str | None = None
     selected: bool = False
+    grade_components: list[GradeComponent] = Field(default_factory=list)
+
+    @computed_field
+    @property
+    def grade_weights_complete(self) -> bool:
+        if not self.grade_components:
+            return False
+        return weights_complete(self.grade_components)
 
 
 class SourceKind(StrEnum):
@@ -93,9 +160,6 @@ class EventKind(StrEnum):
     OTHER = "other"
 
 
-Confidence = Annotated[float, Field(ge=0, le=1)]
-
-
 class AcademicEventCandidate(BaseModel):
     id: str
     course_id: str
@@ -109,16 +173,33 @@ class AcademicEventCandidate(BaseModel):
     location: str | None = None
     recurrence: list[str] = Field(default_factory=list)
     source_url: AnyHttpUrl | None = None
-    evidence: str
-    evidence_start: int | None = Field(default=None, ge=0)
-    evidence_end: int | None = Field(default=None, ge=0)
-    confidence: Confidence
+    evidence: list[Evidence] = Field(min_length=1)
+    external_source: str | None = Field(default=None, max_length=32)
+    external_id: str | None = Field(default=None, max_length=128)
+    date_precision: DatePrecision = DatePrecision.EXACT
+    status: CandidateStatus = CandidateStatus.PUBLISHED
+    hard_deadline: bool = False
     submitted: bool = False
     has_conflict: bool = False
     review_required: bool = False
 
+    @property
+    def identity_key(self) -> str:
+        if self.external_id:
+            return f"{self.external_source or 'unknown'}:{self.external_id}"
+        return f"{self.course_id}:{self.kind.value}:{self.title.strip().lower()}"
+
+    @property
+    def confidence(self) -> float:
+        """A fact is only as good as its weakest supporting field."""
+        return min(item.confidence for item in self.evidence)
+
     @model_validator(mode="after")
     def validate_schedule(self) -> AcademicEventCandidate:
+        if self.date_precision is DatePrecision.UNKNOWN:
+            if self.start_at is not None or self.all_day_date is not None:
+                raise ValueError("unknown precision cannot carry a date")
+            return self
         if self.all_day_date is None and self.start_at is None:
             raise ValueError("candidate requires a date or start time")
         if self.all_day_date is not None and self.start_at is not None:
@@ -127,16 +208,6 @@ class AcademicEventCandidate(BaseModel):
             raise ValueError("end time requires a start time")
         if self.end_at is not None and self.end_at <= self.start_at:
             raise ValueError("end time must follow start time")
-        if not self.evidence.strip():
-            raise ValueError("candidate requires source evidence")
-        if (self.evidence_start is None) != (self.evidence_end is None):
-            raise ValueError("evidence offsets must be supplied together")
-        if (
-            self.evidence_start is not None
-            and self.evidence_end is not None
-            and self.evidence_end <= self.evidence_start
-        ):
-            raise ValueError("evidence end must follow evidence start")
         return self
 
     @property
@@ -146,8 +217,20 @@ class AcademicEventCandidate(BaseModel):
             and not self.submitted
             and not self.has_conflict
             and not self.review_required
-            and bool(self.evidence.strip())
+            and bool(self.evidence)
+            and self.date_precision is DatePrecision.EXACT
+            and self.status is CandidateStatus.PUBLISHED
         )
+
+
+class CandidateChange(BaseModel):
+    id: str
+    candidate_id: str
+    field: str = Field(min_length=1, max_length=64)
+    old_value: str | None = None
+    new_value: str | None = None
+    source_revision_id: str
+    detected_at: datetime
 
 
 class ExtractionState(StrEnum):

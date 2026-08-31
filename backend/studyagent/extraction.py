@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 from datetime import UTC, date, datetime
@@ -15,7 +16,10 @@ from studyagent.agents.course_event_extractor import (
 )
 from studyagent.models import (
     AcademicEventCandidate,
+    DatePrecision,
     EventKind,
+    Evidence,
+    ExtractionMethod,
     ExtractionRecord,
     ExtractionResult,
     ExtractionState,
@@ -27,7 +31,7 @@ from studyagent.prompts import COURSE_EVENT_PROMPT_VERSION
 
 MAX_MODEL_SOURCE_CHARACTERS = 200_000
 MAX_EXTRACTED_EVENTS = 200
-EXTRACTOR_VERSION = "event-extractor-v1"
+EXTRACTOR_VERSION = "event-extractor-v2"
 STUDY_TIME_ZONE = ZoneInfo("America/Los_Angeles")
 RRULE_FREQUENCIES = {"DAILY", "WEEKLY", "MONTHLY", "YEARLY"}
 RRULE_KEYS = {"FREQ", "UNTIL", "COUNT", "INTERVAL", "BYDAY", "BYMONTHDAY"}
@@ -98,6 +102,7 @@ class EventDraft(BaseModel):
     recurrence: list[str] = Field(default_factory=list, max_length=5)
     evidence: str = Field(min_length=1, max_length=500)
     confidence: float = Field(ge=0, le=1)
+    date_precision: DatePrecision | None = None
 
     @model_validator(mode="after")
     def validate_schedule(self) -> EventDraft:
@@ -124,6 +129,22 @@ class ExtractionBatch(BaseModel):
     )
 
 
+class _VertexEventDraft(BaseModel):
+    kind: EventKind
+    title: str
+    start_at: str | None = None
+    end_at: str | None = None
+    all_day_date: str | None = None
+    location: str | None = None
+    recurrence: list[str] = Field(default_factory=list)
+    evidence: str
+    confidence: float
+
+
+class _VertexExtractionBatch(BaseModel):
+    events: list[_VertexEventDraft] = Field(default_factory=list)
+
+
 class StructuredModel(Protocol):
     model_name: str
 
@@ -140,7 +161,7 @@ class ExtractionStore(Protocol):
 
 class AdkGeminiModel(_AdkGeminiModel):
     def __init__(self, *, model: str | None = None) -> None:
-        super().__init__(output_schema=ExtractionBatch, model=model)
+        super().__init__(output_schema=_VertexExtractionBatch, model=model)
 
 
 def build_extraction_prompt(*, normalized_text: str, term: str) -> str:
@@ -198,7 +219,13 @@ class EventExtractor:
 
         try:
             raw_output = await self._model.generate(prompt)
-            batch = ExtractionBatch.model_validate_json(raw_output)
+            raw_batch = json.loads(raw_output)
+            _VertexExtractionBatch.model_validate(raw_batch)
+            for event in raw_batch.get("events", []):
+                recurrence = event.get("recurrence") or []
+                if any(not _valid_rrule(value) for value in recurrence):
+                    event["recurrence"] = []
+            batch = ExtractionBatch.model_validate(raw_batch)
             candidates = self._candidates(
                 source=source,
                 revision=revision,
@@ -246,11 +273,30 @@ class EventExtractor:
         for draft in batch.events:
             evidence_start = normalized_text.find(draft.evidence)
             if evidence_start < 0:
-                raise ExtractionError("event evidence was not found in the source")
+                continue
             evidence_end = evidence_start + len(draft.evidence)
+            date_precision = draft.date_precision
+            if date_precision is None:
+                date_precision = (
+                    DatePrecision.EXACT if draft.start_at else DatePrecision.DATE_ONLY
+                )
             digest = hashlib.sha256(
                 f"{revision.id}:{draft.model_dump_json()}".encode()
             ).hexdigest()[:24]
+            field_name = "start_at" if draft.start_at else "all_day_date"
+            evidence_item = Evidence(
+                field=field_name,
+                source_id=source.id,
+                source_revision_id=revision.id,
+                method=ExtractionMethod.PROSE,
+                confidence=draft.confidence,
+                excerpt=draft.evidence,
+                excerpt_start=evidence_start,
+                excerpt_end=evidence_end,
+            )
+            draft_data = draft.model_dump(
+                exclude={"evidence", "confidence", "date_precision"}
+            )
             candidates.append(
                 AcademicEventCandidate(
                     id=digest,
@@ -258,10 +304,10 @@ class EventExtractor:
                     source_id=source.id,
                     source_revision_id=revision.id,
                     source_url=source.url,
-                    evidence_start=evidence_start,
-                    evidence_end=evidence_end,
+                    date_precision=date_precision,
+                    evidence=[evidence_item],
                     review_required=True,
-                    **draft.model_dump(),
+                    **draft_data,
                 )
             )
         return candidates

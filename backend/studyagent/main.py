@@ -5,9 +5,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .models import ConnectionStatus, ProviderName
+from .api.sources import router as sources_router
+from .taskmaster.api import require_owner, router as taskmaster_router
+from fastapi import Depends
 
 
 app = FastAPI(title="StudyAgent", version="0.1.0")
+app.include_router(taskmaster_router)
+app.include_router(sources_router, dependencies=[Depends(require_owner)])
 
 
 @app.get("/api/health")
