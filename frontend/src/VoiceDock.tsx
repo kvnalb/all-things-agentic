@@ -85,6 +85,7 @@ export function VoiceDock({ api }: { api: (path: string, options?: RequestInit) 
   const [heard, setHeard] = useState("");
   const [reply, setReply] = useState("");
   const recogRef = useRef<SpeechRecognitionLike | null>(null);
+  const copyRef = useRef<HTMLDivElement | null>(null);
 
   const win = window as WindowWithSpeech;
   const SR = win.SpeechRecognition || win.webkitSpeechRecognition;
@@ -98,6 +99,12 @@ export function VoiceDock({ api }: { api: (path: string, options?: RequestInit) 
       window.speechSynthesis.onvoiceschanged = null;
     };
   }, []);
+
+  useEffect(() => {
+    const copy = copyRef.current;
+    if (!copy) return;
+    copy.scrollTop = 0;
+  }, [reply, heard, state]);
 
   const pickVoice = () => {
     const voices = window.speechSynthesis.getVoices() || [];
@@ -221,7 +228,7 @@ export function VoiceDock({ api }: { api: (path: string, options?: RequestInit) 
           >
             <Mic size={20} strokeWidth={2.25} />
           </button>
-          <div className="voice-copy">
+          <div className="voice-copy" ref={copyRef}>
             {!supported ? (
               <p className="lede tight">Voice needs Chrome or Edge. Everything else works here.</p>
             ) : reply ? (

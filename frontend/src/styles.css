@@ -557,7 +557,7 @@ button { cursor: pointer; }
 .toast[data-kind="error"] { color: var(--rose); }
 .toast { bottom: 6.5rem; }
 
-.dash { padding-bottom: 7rem; }
+.dash { padding-bottom: 9rem; }
 
 .voice-dock {
   position: fixed;
@@ -608,13 +608,14 @@ button { cursor: pointer; }
 }
 .voice-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.85rem;
 }
 .voice-mic {
   width: 2.75rem;
   height: 2.75rem;
   flex: none;
+  margin-top: 0.05rem;
   border: 1px solid var(--line);
   background: var(--bg);
   border-radius: 999px;
@@ -639,7 +640,16 @@ button { cursor: pointer; }
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mint) 55%, transparent); }
   100% { box-shadow: 0 0 0 14px transparent; }
 }
-.voice-copy { flex: 1; min-width: 0; }
+.voice-copy {
+  flex: 1;
+  min-width: 0;
+  max-height: min(32vh, 14rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+  scrollbar-gutter: stable;
+}
 .voice-copy .eyebrow { margin-bottom: 0.15rem; }
 .voice-you {
   margin: 0 0 0.35rem;
