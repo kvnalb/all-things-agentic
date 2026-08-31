@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { CalendarDays, Moon, RefreshCw, Settings, Sun } from "lucide-react";
-import { courseCode, dayLabel, dayStamp, dueClock, dueIn, formatDue, groupByDay, humanSync, planStats } from "../lib";
+import { courseCode, dayLabel, dayStamp, dueClock, dueIn, formatDue, groupByDay, planStats } from "../lib";
 import { courseColor } from "../scheduleColors";
 import type { CoverageCourse, Daily, DailyTask, DashboardTab, RegistryRow, Status } from "../types";
 import { VoiceDock } from "../VoiceDock";
@@ -138,7 +138,6 @@ export function Dashboard({
     : schedule;
   const lead = daily.active[0];
   const rest = daily.active.slice(1);
-  const sync = humanSync(status?.last_run);
   const calendarUrl = status?.calendar_url || "https://calendar.google.com/calendar/r";
   const writesOn = Boolean(status?.calendar_writes_enabled);
   const googleEvents = daily.calendar?.events || [];
@@ -188,15 +187,6 @@ export function Dashboard({
             </button>
           )}
         </div>
-      </div>
-
-      <div className={`sync-chip ${sync.ok ? "" : "bad"} ${busy ? "busy" : ""}`}>
-        <span>{busy ? "Updating your plan…" : sync.text}</span>
-        {!sync.ok && (
-          <button type="button" onClick={onSync} disabled={busy}>
-            Retry
-          </button>
-        )}
       </div>
 
       {!writesOn && (
