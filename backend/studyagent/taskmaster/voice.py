@@ -8,6 +8,7 @@ import re
 
 from studyagent.taskmaster.cloud import Settings
 from studyagent.taskmaster.store import load_config_dict, load_daily_view
+from studyagent.taskmaster.tts import synthesize_reply_audio
 
 SYSTEM_PROMPT = """\
 You are the student's taskmaster assistant, answering out loud. You will be
@@ -148,4 +149,13 @@ def ask(question: str) -> dict:
         }
 
     text = re.sub(r"[*#`]", "", text)
-    return {"answer": text, "used_context": has_data}
+    payload: dict = {"answer": text, "used_context": has_data}
+    if text:
+        try:
+            audio = synthesize_reply_audio(text)
+            if audio:
+                payload["audio_base64"] = audio
+                payload["audio_mime"] = "audio/mpeg"
+        except Exception:
+            pass
+    return payload

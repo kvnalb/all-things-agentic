@@ -18,6 +18,7 @@ dependencies = [
   "pypdf>=6.1,<7",
   "python-multipart>=0.0.20,<1",
   "uvicorn[standard]>=0.35,<1",
+  "google-cloud-texttospeech>=2.27,<3",
 ]
 
 [dependency-groups]

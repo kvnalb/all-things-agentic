@@ -26,10 +26,13 @@ class VoiceAskTest(unittest.TestCase):
         }
         with patch("studyagent.taskmaster.voice.load_daily_view", return_value=view):
             with patch("studyagent.taskmaster.voice.load_config_dict", return_value={}):
-                with patch("google.genai.Client") as client_cls:
-                    client_cls.return_value.models.generate_content.return_value = response
-                    result = ask("What should I work on?")
+                with patch("studyagent.taskmaster.voice.synthesize_reply_audio", return_value="audio"):
+                    with patch("google.genai.Client") as client_cls:
+                        client_cls.return_value.models.generate_content.return_value = response
+                        result = ask("What should I work on?")
         self.assertEqual(result["answer"], long_answer.strip())
+        self.assertEqual(result["audio_base64"], "audio")
+        self.assertEqual(result["audio_mime"], "audio/mpeg")
         generate = client_cls.return_value.models.generate_content
         generate.assert_called_once()
         self.assertEqual(generate.call_args.kwargs["model"], DEFAULT_VOICE_MODEL)

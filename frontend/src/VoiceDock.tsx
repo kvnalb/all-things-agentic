@@ -86,6 +86,7 @@ export function VoiceDock({ api }: { api: (path: string, options?: RequestInit) 
   const [reply, setReply] = useState("");
   const recogRef = useRef<SpeechRecognitionLike | null>(null);
   const copyRef = useRef<HTMLDivElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const win = window as WindowWithSpeech;
   const SR = win.SpeechRecognition || win.webkitSpeechRecognition;
@@ -106,6 +107,27 @@ export function VoiceDock({ api }: { api: (path: string, options?: RequestInit) 
     copy.scrollTop = 0;
   }, [reply, heard, state]);
 
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.src = "";
+      }
+    };
+  }, []);
+
+  const stopPlayback = () => {
+    window.speechSynthesis.cancel();
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.src = "";
+      audioRef.current = null;
+    }
+  };
+
   const pickVoice = () => {
     const voices = window.speechSynthesis.getVoices() || [];
     const prefs = [
@@ -124,28 +146,42 @@ export function VoiceDock({ api }: { api: (path: string, options?: RequestInit) 
     return english.find((v) => !/compact/i.test(v.voiceURI || "")) || english[0] || null;
   };
 
-  const speak = (text: string) => {
-    try {
-      const chunks = chunkSpeechText(text);
-      if (!chunks.length) return;
-      window.speechSynthesis.cancel();
-      const voice = pickVoice();
-      let index = 0;
+  const speakWithBrowser = (text: string) => {
+    const chunks = chunkSpeechText(text);
+    if (!chunks.length) return;
+    const voice = pickVoice();
+    let index = 0;
 
-      const speakNext = () => {
-        if (index >= chunks.length) return;
-        const utterance = new SpeechSynthesisUtterance(chunks[index]);
-        if (voice) utterance.voice = voice;
-        const advance = () => {
-          index += 1;
-          window.setTimeout(speakNext, 40);
-        };
-        utterance.onend = advance;
-        utterance.onerror = advance;
-        window.speechSynthesis.speak(utterance);
+    const speakNext = () => {
+      if (index >= chunks.length) return;
+      const utterance = new SpeechSynthesisUtterance(chunks[index]);
+      if (voice) utterance.voice = voice;
+      const advance = () => {
+        index += 1;
+        window.setTimeout(speakNext, 40);
       };
+      utterance.onend = advance;
+      utterance.onerror = advance;
+      window.speechSynthesis.speak(utterance);
+    };
 
-      speakNext();
+    speakNext();
+  };
+
+  const speak = async (text: string, audioBase64?: string, audioMime = "audio/mpeg") => {
+    stopPlayback();
+    if (audioBase64) {
+      try {
+        const audio = new Audio(`data:${audioMime};base64,${audioBase64}`);
+        audioRef.current = audio;
+        await audio.play();
+        return;
+      } catch {
+        /* fall back to browser speech */
+      }
+    }
+    try {
+      speakWithBrowser(text);
     } catch {
       /* text still visible */
     }
@@ -158,11 +194,11 @@ export function VoiceDock({ api }: { api: (path: string, options?: RequestInit) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question }),
-      })) as { answer?: string };
+      })) as { answer?: string; audio_base64?: string; audio_mime?: string };
       const answer = result.answer || "";
       setReply(answer);
       setState("idle");
-      speak(answer);
+      await speak(answer, result.audio_base64, result.audio_mime || "audio/mpeg");
     } catch {
       setReply("I couldn't reach the agent.");
       setState("idle");
@@ -175,7 +211,7 @@ export function VoiceDock({ api }: { api: (path: string, options?: RequestInit) 
       return;
     }
     if (!supported || !SR) return;
-    window.speechSynthesis.cancel();
+    stopPlayback();
     const recognition = new SR();
     recogRef.current = recognition;
     recognition.lang = "en-US";
