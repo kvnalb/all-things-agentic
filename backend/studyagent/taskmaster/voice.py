@@ -31,15 +31,25 @@ STYLE — this is being spoken aloud, not read:
 """
 
 VOICE_MAX_OUTPUT_TOKENS = 1024
-DEFAULT_VOICE_MODEL = "gemini-omni-1.1-flash-preview"
+DEFAULT_VOICE_MODEL = "gemini-3.7-flash"
+OMNI_VOICE_MODEL = "gemini-omni-1.1-flash-preview"
 
 
 def _voice_model() -> str:
     return os.environ.get("STUDYAGENT_VOICE_MODEL", DEFAULT_VOICE_MODEL)
 
 
+def _voice_fallback_model() -> str:
+    return os.environ.get("STUDYAGENT_GEMINI_MODEL", DEFAULT_VOICE_MODEL)
+
+
 def _is_omni_model(model: str) -> bool:
     return "omni" in model.lower()
+
+
+def _is_retriable_voice_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "429" in message or "quota" in message or "resource exhausted" in message
 
 
 def _response_text(response) -> str:
@@ -175,7 +185,14 @@ def ask(question: str) -> dict:
             project=Settings.project,
             location=os.environ.get("GOOGLE_CLOUD_LOCATION", "global"),
         )
-        text = _generate_voice_answer(client, model, prompt)
+        try:
+            text = _generate_voice_answer(client, model, prompt)
+        except Exception as exc:
+            fallback = _voice_fallback_model()
+            if model != fallback and _is_retriable_voice_error(exc):
+                text = _generate_voice_answer(client, fallback, prompt)
+            else:
+                raise
     except Exception as exc:
         return {
             "answer": f"I couldn't work that out just now. {str(exc)[:60]}",
