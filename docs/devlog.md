@@ -2,6 +2,14 @@
 
 Keep entries short and limited to meaningful or demo-worthy decisions.
 
+## 2026-08-31 — Move every live path to Gemini 3.7 Flash
+
+- **Before:** Model IDs were split across four eras and none of the paths that actually run met the hackathon's "Gemini 3.5 or newer" rule. The ADK effort agent hardcoded `gemini-3-flash-preview`, voice Q&A defaulted to `gemini-2.5-flash`, and syllabus analysis used the floating `gemini-flash-latest` alias. Only `agents/course_event_extractor.py` defaulted to `gemini-3.5-flash`, and no HTTP route reaches it.
+- **Decision:** Pin every path to `gemini-3.7-flash` (GA on Vertex since 2026-08-13). Replace explicit `temperature` with `thinking_config.thinking_level: LOW`, since Google calibrates Gemini 3+ reasoning around default sampling values and recommends leaving `temperature`/`top_p`/`top_k` alone. `LOW` keeps effort estimation inside its 25s budget and keeps spoken answers quick. Extraction determinism now rests on the verbatim-evidence validator rather than `temperature=0`.
+- **After:** `donor/config.py`, `taskmaster/agent.py`, `donor/syllabus.py`, `agents/course_event_extractor.py`, and `taskmaster/voice.py` all resolve to `gemini-3.7-flash`. `STUDYAGENT_GEMINI_MODEL` and `SYLLABUS_MODEL` still override.
+- **Evidence:** `make check`; `rg -n "gemini-" backend/` shows one model ID across all five call sites.
+- **Limitation:** Verified against Vertex model documentation and the local SDK, not yet against a live sync. Requesting `gemini-omni-flash-preview` for voice was considered and rejected: it emits video, refuses system instructions and structured output, and takes no audio input, so it cannot serve `/api/ask`. Voice input and playback stay in the browser via the Web Speech API.
+
 ## 2026-08-31 — Dashboard merge: keep prefs, colors, voice
 
 - **Before:** PR #22 replaced the student UI. Merging it as-is would drop onboarding work hours/off days, per-course calendar colors, and the voice dock, and retries of in-app calendar creates could duplicate Google events.

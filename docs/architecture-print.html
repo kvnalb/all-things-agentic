@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>StudyAgent architecture</title>
+<style>
+  @page { size: A4 landscape; margin: 14mm; }
+  body { font: 11pt/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1c1915; margin: 0; }
+  h1 { font-size: 15pt; margin: 0 0 1mm; }
+  .sub { color: #5c554c; font-size: 9pt; margin: 0 0 4mm; }
+  figure { margin: 0; page-break-after: always; break-after: page; page-break-inside: avoid; break-inside: avoid; }
+  figure:last-of-type { page-break-after: auto; break-after: auto; }
+  figcaption { font-size: 9.5pt; color: #3a352e; margin: 3mm 0 0; max-width: 250mm; }
+  figcaption b { color: #1c1915; }
+  img { max-width: 100%; max-height: 128mm; object-fit: contain; display: block; margin: 0 auto; }
+  code { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 9.5pt; }
+</style>
+
+<h1>StudyAgent — system architecture</h1>
+<p class="sub">Long-running academic Taskmaster on Google Cloud. Gemini 3.7 Flash via Vertex AI, Google ADK 2, Cloud Run, Firestore, Cloud Storage, Secret Manager, Cloud Scheduler.</p>
+
+<figure>
+  <img src="architecture-1.png" alt="StudyAgent deployment architecture">
+  <figcaption>
+    <b>Figure 1. StudyAgent system architecture on Google Cloud.</b>
+    Canvas, course sources, and an hourly Cloud Scheduler wake all feed one Cloud Run
+    container. Gemini 3.7 Flash on Vertex AI estimates effort and extracts schedule
+    facts, a deterministic planner ranks and places the work, and <code>CalendarWriter</code>
+    reconciles a single dedicated Google Calendar. Firestore and Cloud Storage hold all
+    durable state, so Cloud Run carries none and can scale to zero between wakes.
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="architecture-2.png" alt="One hourly sync run">
+  <figcaption>
+    <b>Figure 2. One hourly sync run, end to end.</b>
+    Cloud Scheduler wakes the service over an authenticated endpoint. Gemini is called
+    twice, once to analyze syllabus and course text and once per task to estimate effort,
+    and both calls are bounded by timeouts and clamps. Priority, block placement, and the
+    Calendar writes stay deterministic. When calendar writes are disabled the run stops
+    after persisting the registry.
+  </figcaption>
+</figure>
+
+<figure>
+  <img src="architecture-3.png" alt="Idempotent write decision">
+  <figcaption>
+    <b>Figure 3. How one Calendar write decides its own action.</b>
+    Each event carries a stable <code>studyagent_key</code> and a Firestore binding storing a
+    SHA-256 hash of the intended body. A rerun compares hashes and skips, patches, or
+    inserts, so an unchanged sync makes no Calendar API calls. Deletes are capped at 50
+    per run and the remainder defers to the next wake.
+  </figcaption>
+</figure>

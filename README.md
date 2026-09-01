@@ -22,14 +22,16 @@ Calendar. It is an owner-only application—not a chatbot and not a mock calenda
 
 ## Architecture
 
-See [system and agent design](docs/architecture.md). Runtime continuity lives
-in Firestore; Cloud Run can scale to zero between Cloud Scheduler wakes.
+![StudyAgent deployment architecture](docs/architecture-1.png)
 
-```text
-Canvas + course sources → Cloud Run → ADK 2 + Vertex Gemini
-                       → deterministic planner → Google Calendar
-                       → Firestore tasks/bindings/runs → React dashboard
-```
+Canvas and course sources feed a single Cloud Run container. Gemini 3.7 Flash
+estimates effort and extracts evidenced schedule facts through ADK 2, a
+deterministic planner ranks and places the work, and `CalendarWriter` reconciles
+one dedicated Google Calendar. Runtime continuity lives in Firestore, so Cloud
+Run can scale to zero between Cloud Scheduler wakes.
+
+See [system and agent design](docs/architecture.md) for the sync sequence and
+the idempotent write decision.
 
 ## Repository map
 
